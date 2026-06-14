@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+.env.local
 uploads/
 output/
 voices/*/
@@ -14,6 +15,8 @@ node_modules/
 .celerybeat-schedule
 data/
 *.db
+*.log
+*.pid
 
 # Tauri build artifacts
 src-tauri/target/
@@ -41,3 +44,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.cache/
+.pytest_cache/
+.mypy_cache/

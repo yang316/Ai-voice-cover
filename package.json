@@ -1,12 +1,12 @@
 {
   "name": "ai-voice-cover",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "AI Voice Cover - 人声分离 + 声音转换 + 混合输出",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd .venv && source bin/activate && cd .. && uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
-    "dev:frontend": "echo 'Frontend is static HTML, no build needed'",
+    "dev:frontend": "cd frontend-vue && npm run dev",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

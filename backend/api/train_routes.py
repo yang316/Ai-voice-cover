@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.config import settings
@@ -109,26 +110,39 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
     progress = _training_tasks[task_id]
 
     try:
-        # Step 1: Prepare data
+        # Step 1: Prepare data (0-15% overall)
         progress.status = TrainingStatus.PREPARING
         progress.message = "Preparing training data..."
 
         preparer = DataPreparer(work_dir)
-        data_dir = await preparer.prepare(audio_paths, config.sample_rate)
 
-        # Step 2: Extract features
+        def on_prepare(pct, msg):
+            progress.stage_pct = pct
+            progress.message = msg
+
+        data_dir = await preparer.prepare(audio_paths, config.sample_rate, on_progress=on_prepare)
+
+        # Step 2: Extract features (15-35% overall)
         progress.status = TrainingStatus.EXTRACTING
+        progress.stage_pct = 0
         progress.message = "Extracting HuBERT features..."
 
         extractor = FeatureExtractor(work_dir, config.f0_method)
 
         def on_extract(msg):
             progress.message = msg
+            # Parse "HuBERT: 3/10" style messages to get progress
+            try:
+                parts = msg.split(":")[-1].strip().split("/")
+                progress.stage_pct = int(parts[0]) / int(parts[1]) * 100
+            except (ValueError, IndexError):
+                pass
 
         model_dir = await extractor.extract(data_dir, config.sample_rate, config.pitch_guidance, on_extract)
 
-        # Step 3: Train
+        # Step 3: Train (35-100% overall)
         progress.status = TrainingStatus.TRAINING
+        progress.stage_pct = 0
         progress.message = "Training model..."
 
         trainer = RVCTrainer(work_dir, config)
@@ -137,6 +151,7 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
             progress.epoch = epoch
             progress.total_epochs = total
             progress.loss = loss
+            progress.stage_pct = epoch / total * 100
             progress.message = f"Training: epoch {epoch}/{total}, loss={loss:.6f}"
 
         model_path = await trainer.train(model_dir, on_progress=on_progress)
@@ -166,6 +181,19 @@ async def get_training_status(task_id: str):
         raise HTTPException(404, "Training task not found")
 
     p = _training_tasks[task_id]
+
+    # Weighted overall progress: preparing 0-15%, extracting 15-35%, training 35-100%
+    if p.status == TrainingStatus.PREPARING:
+        overall_pct = p.stage_pct * 0.15
+    elif p.status == TrainingStatus.EXTRACTING:
+        overall_pct = 15 + p.stage_pct * 0.20
+    elif p.status == TrainingStatus.TRAINING:
+        overall_pct = 35 + p.stage_pct * 0.65
+    elif p.status == TrainingStatus.COMPLETED:
+        overall_pct = 100
+    else:
+        overall_pct = 0
+
     return {
         "task_id": task_id,
         "status": p.status.value,
@@ -174,7 +202,7 @@ async def get_training_status(task_id: str):
         "loss": p.loss,
         "message": p.message,
         "model_path": p.model_path,
-        "progress_pct": round(p.epoch / max(p.total_epochs, 1) * 100),
+        "progress_pct": round(overall_pct),
     }
 
 
@@ -183,6 +211,17 @@ async def list_training_tasks():
     """List all training tasks."""
     results = []
     for task_id, p in _training_tasks.items():
+        if p.status == TrainingStatus.PREPARING:
+            overall_pct = p.stage_pct * 0.15
+        elif p.status == TrainingStatus.EXTRACTING:
+            overall_pct = 15 + p.stage_pct * 0.20
+        elif p.status == TrainingStatus.TRAINING:
+            overall_pct = 35 + p.stage_pct * 0.65
+        elif p.status == TrainingStatus.COMPLETED:
+            overall_pct = 100
+        else:
+            overall_pct = 0
+
         results.append({
             "task_id": task_id,
             "status": p.status.value,
@@ -190,6 +229,36 @@ async def list_training_tasks():
             "total_epochs": p.total_epochs,
             "loss": p.loss,
             "message": p.message,
-            "progress_pct": round(p.epoch / max(p.total_epochs, 1) * 100),
+            "progress_pct": round(overall_pct),
         })
     return results
+
+
+@router.get("/train/download/{task_id}")
+async def download_trained_model(task_id: str):
+    """Download trained model file."""
+    if task_id not in _training_tasks:
+        raise HTTPException(404, "Training task not found")
+
+    progress = _training_tasks[task_id]
+
+    if progress.status != TrainingStatus.COMPLETED:
+        raise HTTPException(400, f"Training not completed. Status: {progress.status.value}")
+
+    if not progress.model_path:
+        raise HTTPException(404, "Model file not found")
+
+    model_path = Path(progress.model_path)
+    if not model_path.exists():
+        raise HTTPException(404, "Model file does not exist on disk")
+
+    # Return model file
+    return FileResponse(
+        path=str(model_path),
+        media_type="application/octet-stream",
+        filename=f"{model_path.stem}_{task_id}.pth",
+        headers={
+            "Content-Disposition": f'attachment; filename="{model_path.stem}_{task_id}.pth"'
+        }
+    )
+

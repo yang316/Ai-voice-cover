@@ -12,12 +12,20 @@ echo "========================================="
 echo "  AI Voice Cover - Desktop Build"
 echo "========================================="
 
-# 1. Install Node.js dependencies
-echo "[1/5] Installing Node.js dependencies..."
+# 1. Build Vue frontend
+echo "[1/5] Building Vue frontend..."
+cd frontend-vue
+npm ci
+npm run build
+cp -r dist ../frontend
+cd "$APP_DIR"
+
+# 2. Install root Node.js deps
+echo "[2/5] Installing Node.js dependencies..."
 npm install
 
-# 2. Build Python sidecar for current platform
-echo "[2/5] Building Python sidecar..."
+# 3. Build Python sidecar for current platform
+echo "[3/5] Building Python sidecar..."
 source .venv/bin/activate
 
 pip install pyinstaller --quiet
@@ -46,7 +54,7 @@ pyinstaller \
 
 # Copy sidecar to Tauri expected location
 mkdir -p src-tauri/sidecar
-TARGET_TRIPLE=$(rustc -vV | grep host | cut -d\' \' -f2)
+TARGET_TRIPLE=$(rustc -vV | grep host | cut -d\' \'-f2)
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     cp dist/$SIDECAr_NAME "src-tauri/sidecar/${SIDECAr_NAME}-${TARGET_TRIPLE}"
@@ -54,17 +62,17 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     cp dist/$SIDECAr_NAME "src-tauri/sidecar/${SIDECAr_NAME}-${TARGET_TRIPLE}"
 fi
 
-echo "[3/5] Sidecar built: src-tauri/sidecar/"
+echo "[4/5] Sidecar built: src-tauri/sidecar/"
 
-# 3. Generate app icons
-echo "[4/5] Generating icons..."
+# 4. Generate app icons
+echo "[5/5] Generating icons..."
 if [ ! -f src-tauri/icons/icon.png ]; then
     echo "  Warning: Place a 1024x1024 icon at src-tauri/icons/icon.png"
     echo "  Then run: npx @tauri-apps/cli icon src-tauri/icons/icon.png"
 fi
 
-# 4. Build Tauri app
-echo "[5/5] Building Tauri app..."
+# 5. Build Tauri app
+echo "[6/6] Building Tauri app..."
 npx tauri build
 
 echo ""

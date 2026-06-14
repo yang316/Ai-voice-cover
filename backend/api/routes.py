@@ -12,6 +12,7 @@ from backend.api.schemas import (
     TaskInfo,
     TaskResponse,
     TaskStatus,
+    TaskStep,
     VoiceInfo,
 )
 from backend.backends.factory import ComputeBackendType, create_backend
@@ -23,16 +24,29 @@ router = APIRouter()
 
 def _to_task_info(data: dict) -> TaskInfo:
     """Convert database row to TaskInfo."""
+    status = TaskStatus(data["status"])
+
+    # Map old status to step
+    step_mapping = {
+        TaskStatus.PENDING: TaskStep.SEPARATING,
+        TaskStatus.PROCESSING: TaskStep.CONVERTING,
+        TaskStatus.COMPLETED: TaskStep.COMPLETE,
+        TaskStatus.FAILED: TaskStep.COMPLETE,
+    }
+    step = step_mapping.get(status, TaskStep.SEPARATING)
+
     return TaskInfo(
-        task_id=data["task_id"],
-        status=TaskStatus(data["status"]),
+        id=data["task_id"],
+        status=status,
         progress=data.get("progress", 0),
+        step=step,
         message=data.get("message", ""),
         input_file=data.get("input_file", ""),
         output_file=data.get("output_file") or None,
         voice_id=data.get("voice_id", ""),
         created_at=data.get("created_at", ""),
         completed_at=data.get("completed_at") or None,
+        error=data.get("error") or None,
     )
 
 
@@ -50,12 +64,19 @@ async def health():
     from backend.core.device import get_device_info
     device = get_device_info()
 
+    # Build GPU info for frontend
+    gpu_info = {
+        "available": device["best_device"] != "cpu",
+        "device": device["devices"][0]["name"] if device["devices"] else "CPU"
+    }
+
     return HealthResponse(
-        status="ok",
+        status="online",
+        gpu=gpu_info,
         backends=backends,
         device_type=device["best_device"],
         device_name=device["devices"][0]["name"] if device["devices"] else "Unknown",
-        devices=device["devices"],
+        devices=[{"name": d["name"], "type": d["type"], "available": True} for d in device["devices"]],
     )
 
 

@@ -24,17 +24,30 @@ async def list_voices():
         if not voice_dir.is_dir():
             continue
 
+        # Find model and index files
+        pth_files = list(voice_dir.glob("*.pth"))
+        index_files = list(voice_dir.glob("*.index"))
+
+        model_path = str(pth_files[0]) if pth_files else None
+        index_path = str(index_files[0]) if index_files else None
+
         meta_path = voice_dir / "metadata.json"
         if meta_path.exists():
             data = json.loads(meta_path.read_text())
+            # Ensure model_path and index_path are set
+            if "model_path" not in data and model_path:
+                data["model_path"] = model_path
+            if "index_path" not in data and index_path:
+                data["index_path"] = index_path
             voices.append(VoiceInfo(**data))
         else:
             # Auto-generate metadata from directory name
-            pth_files = list(voice_dir.glob("*.pth"))
             voices.append(VoiceInfo(
                 id=voice_dir.name,
                 name=voice_dir.name.replace("_", " ").title(),
                 source="local",
+                model_path=model_path,
+                index_path=index_path,
             ))
 
     return voices
@@ -69,6 +82,7 @@ async def upload_voice(
         f.write(content)
 
     # Save index file if provided
+    index_path = None
     if index_file and index_file.filename and index_file.filename.endswith(".index"):
         index_path = voice_dir / index_file.filename
         with open(index_path, "wb") as f:
@@ -81,6 +95,8 @@ async def upload_voice(
         name=name,
         description=description,
         source="local",
+        model_path=str(model_path),
+        index_path=str(index_path) if index_path else None,
     )
     meta_path = voice_dir / "metadata.json"
     meta_path.write_text(json.dumps(voice_info.model_dump(), indent=2, ensure_ascii=False))

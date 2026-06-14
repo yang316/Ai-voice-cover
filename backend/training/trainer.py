@@ -49,6 +49,7 @@ class TrainingProgress:
     loss: float = 0.0
     message: str = ""
     model_path: Optional[str] = None
+    stage_pct: float = 0.0  # 0-100 progress within current stage
 
 
 class DataPreparer:
@@ -63,6 +64,7 @@ class DataPreparer:
         audio_paths: list[Path],
         target_sr: int = 40000,
         denoise: bool = True,
+        on_progress=None,
     ) -> Path:
         """
         Prepare training data:
@@ -76,12 +78,19 @@ class DataPreparer:
         output_dir = self.work_dir / "44k"
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        total = len(audio_paths)
         for i, audio_path in enumerate(audio_paths):
-            logger.info(f"Preparing audio {i+1}/{len(audio_paths)}: {audio_path.name}")
+            logger.info(f"Preparing audio {i+1}/{total}: {audio_path.name}")
+            if on_progress:
+                on_progress(i / total * 100, f"Preparing: {i+1}/{total} - {audio_path.name}")
             await asyncio.to_thread(
                 self._process_audio, audio_path, output_dir, target_sr, i
             )
+            if on_progress:
+                on_progress((i + 1) / total * 100, f"Prepared: {i+1}/{total}")
 
+        if on_progress:
+            on_progress(100, "Data preparation complete")
         count = len(list(output_dir.glob("*.wav")))
         logger.info(f"Data preparation complete: {count} segments in {output_dir}")
         return output_dir
@@ -223,7 +232,7 @@ class FeatureExtractor:
 
         # Load HuBERT
         from backend.config import settings
-        hubert_path = settings.base_dir / "models" / "hubert_base.pt"
+        hubert_path = settings.base_dir / "assets" / "hubert" / "hubert_base.pt"
 
         if hubert_path.exists() and hubert_path.is_dir():
             model = HubertModel.from_pretrained(str(hubert_path))
