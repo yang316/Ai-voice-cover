@@ -1232,6 +1232,56 @@
             font-weight: 500;
         }
     </style>
+    <style>
+        /* API Guide styles */
+        .guide-section { margin-bottom: 0.25rem; }
+        .guide-summary {
+            padding: 0.625rem 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+            border-radius: 0.5rem;
+            transition: background 0.15s;
+            list-style: none;
+        }
+        .guide-summary::-webkit-details-marker { display: none; }
+        .guide-summary::before { content: '▸ '; color: hsl(var(--muted-foreground)); }
+        details[open] > .guide-summary::before { content: '▾ '; }
+        .guide-summary:hover { background: hsl(var(--accent) / 0.1); }
+        .guide-content {
+            padding: 0.5rem 0.75rem 0.75rem;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+            color: hsl(var(--muted-foreground));
+        }
+        .guide-content p { margin: 0 0 0.5rem; }
+        .guide-content h4 {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+            margin: 0.75rem 0 0.375rem;
+        }
+        .guide-content ol, .guide-content ul {
+            padding-left: 1.25rem;
+            margin: 0 0 0.5rem;
+        }
+        .guide-content li { margin-bottom: 0.25rem; }
+        .guide-content code {
+            background: hsl(var(--muted) / 0.5);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-family: 'Maple Mono NF', monospace;
+        }
+        .guide-content a {
+            color: hsl(217 91% 60%);
+            text-decoration: none;
+        }
+        .guide-content a:hover { text-decoration: underline; }
+        .guide-link { margin-top: 0.5rem; font-size: 0.8125rem; }
+        .guide-steps { margin-top: 0.25rem; }
+    </style>
 </head>
 <body>
     <div class="app-layout">
@@ -1293,6 +1343,7 @@
                     <div class="select-wrapper">
                         <select class="input select" id="backendSelect">
                             <option value="local">Local GPU</option>
+                            <option value="gpt_sovits">GPT-SoVITS</option>
                             <option value="elevenlabs">ElevenLabs</option>
                             <option value="fish_audio">Fish Audio</option>
                         </select>
@@ -1309,6 +1360,13 @@
                         </button>
                     </div>
                     <p class="form-hint">Required for cloud backends</p>
+                </div>
+
+                <!-- GPT-SoVITS URL (conditional) -->
+                <div class="form-group" id="gptSovitsSection" style="display:none">
+                    <label class="form-label" for="gptSovitsUrl">GPT-SoVITS 服务地址</label>
+                    <input class="input" type="text" id="gptSovitsUrl" placeholder="http://127.0.0.1:9880" value="http://127.0.0.1:9880">
+                    <p class="form-hint">本地运行 GPT-SoVITS 的 API 地址</p>
                 </div>
 
                 <!-- Pitch Shift -->
@@ -1451,6 +1509,105 @@
                     </form>
                 </details>
             </div>
+
+            <!-- API Setup Guide -->
+            <section class="glass-card" aria-labelledby="apiGuideTitle">
+                <div class="glass-card__header">
+                    <svg class="glass-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <h2 class="glass-card__title" id="apiGuideTitle">API 接入指南</h2>
+                </div>
+
+                <details class="guide-section">
+                    <summary class="guide-summary">🎤 GPT-SoVITS（本地部署，效果最好）</summary>
+                    <div class="guide-content">
+                        <p><strong>开源免费</strong>，中文效果最好，5秒音频即可克隆。</p>
+                        <div class="guide-steps">
+                            <h4>安装步骤：</h4>
+                            <ol>
+                                <li>克隆仓库：<code>git clone https://github.com/RVC-Boss/GPT-SoVITS.git</code></li>
+                                <li>安装依赖：<code>pip install -r requirements.txt</code></li>
+                                <li>启动 API 服务：<br><code>python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml</code></li>
+                                <li>在左侧设置中选择 <strong>GPT-SoVITS</strong> 后端</li>
+                            </ol>
+                            <h4>训练自己的模型：</h4>
+                            <ol>
+                                <li>启动 WebUI：<code>python webui.py</code></li>
+                                <li>上传 5~10 秒参考音频</li>
+                                <li>填写对应文字，选择语言</li>
+                                <li>点击训练，完成后自动可用</li>
+                            </ol>
+                        </div>
+                        <p class="guide-link">📖 <a href="https://github.com/RVC-Boss/GPT-SoVITS" target="_blank">GitHub: RVC-Boss/GPT-SoVITS</a>（58.6k ⭐）</p>
+                    </div>
+                </details>
+
+                <details class="guide-section">
+                    <summary class="guide-summary">🐟 Fish Audio（中文最强云端 API）</summary>
+                    <div class="guide-content">
+                        <p>国内团队，中文效果好，支持声音克隆。</p>
+                        <div class="guide-steps">
+                            <h4>获取 API Key：</h4>
+                            <ol>
+                                <li>访问 <a href="https://fish.audio" target="_blank">fish.audio</a> 注册账号</li>
+                                <li>登录后进入 <a href="https://fish.audio/app/api-keys/" target="_blank">API Keys 页面</a></li>
+                                <li>点击 <strong>Create API Key</strong>，复制保存</li>
+                                <li>粘贴到左侧设置的 API Key 输入框</li>
+                            </ol>
+                            <h4>价格：</h4>
+                            <ul>
+                                <li>TTS（s2-pro）：$15 / 100万 UTF-8 字符（约12小时语音）</li>
+                                <li>按量付费，注册送免费额度</li>
+                            </ul>
+                        </div>
+                        <p class="guide-link">📖 <a href="https://docs.fish.audio" target="_blank">Fish Audio API 文档</a></p>
+                    </div>
+                </details>
+
+                <details class="guide-section">
+                    <summary class="guide-summary">🔊 ElevenLabs（英文最强云端 API）</summary>
+                    <div class="guide-content">
+                        <p>全球最流行的 TTS 服务，英文效果顶级，支持 29 种语言。</p>
+                        <div class="guide-steps">
+                            <h4>获取 API Key：</h4>
+                            <ol>
+                                <li>访问 <a href="https://elevenlabs.io" target="_blank">elevenlabs.io</a> 注册账号</li>
+                                <li>登录后点击右上角头像 → <strong>Profile + API Key</strong></li>
+                                <li>在 <strong>API Key</strong> 区域点击 <strong>Show</strong> 复制</li>
+                                <li>粘贴到左侧设置的 API Key 输入框</li>
+                            </ol>
+                            <h4>价格：</h4>
+                            <ul>
+                                <li>🆓 免费：每月 10,000 字符（约10分钟）</li>
+                                <li>Starter $6/月：30,000 字符</li>
+                                <li>Creator $22/月：121,000 字符</li>
+                            </ul>
+                        </div>
+                        <p class="guide-link">📖 <a href="https://elevenlabs.io/docs/api-reference" target="_blank">ElevenLabs API 文档</a></p>
+                    </div>
+                </details>
+
+                <details class="guide-section">
+                    <summary class="guide-summary">🏠 本地 GPU（RVC，完全离线）</summary>
+                    <div class="guide-content">
+                        <p>使用 RVC 模型，无需联网，需要 NVIDIA/AMD/Intel 显卡。</p>
+                        <div class="guide-steps">
+                            <h4>使用方法：</h4>
+                            <ol>
+                                <li>点击左侧 <strong>一键下载基础模型</strong>（首次使用）</li>
+                                <li>从 <a href="https://weights.gg" target="_blank">weights.gg</a> 或 <a href="https://voice-models.com" target="_blank">voice-models.com</a> 下载人声模型</li>
+                                <li>将模型文件夹放到 <code>voices/</code> 目录</li>
+                                <li>在音色模型下拉菜单中选择</li>
+                            </ol>
+                            <h4>显卡要求：</h4>
+                            <ul>
+                                <li>NVIDIA CUDA（推荐，4GB+ 显存）</li>
+                                <li>AMD ROCm / Intel XPU / Apple MPS</li>
+                                <li>无显卡自动回退 CPU（较慢）</li>
+                            </ul>
+                        </div>
+                    </div>
+                </details>
+            </section>
 
             <!-- Task History -->
             <div class="sidebar-section">
@@ -1905,9 +2062,13 @@
            Backend & API Key Toggle
            ═══════════════════════════════════════════════ */
         function setupBackend() {
+            const gptSection = document.getElementById('gptSovitsSection');
             els.backendSelect.addEventListener('change', () => {
-                const needsKey = els.backendSelect.value !== 'local';
+                const backend = els.backendSelect.value;
+                const needsKey = !['local', 'gpt_sovits'].includes(backend);
+                const needsGpt = backend === 'gpt_sovits';
                 els.apiKeySection.classList.toggle('backend-api-section--visible', needsKey);
+                if (gptSection) gptSection.style.display = needsGpt ? '' : 'none';
             });
 
             els.toggleApiKey.addEventListener('click', () => {

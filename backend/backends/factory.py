@@ -8,11 +8,13 @@ class ComputeBackendType(str, Enum):
     LOCAL = "local"
     ELEVENLABS = "elevenlabs"
     FISH_AUDIO = "fish_audio"
+    GPT_SOVITS = "gpt_sovits"
 
 
 def create_backend(
     backend_type: ComputeBackendType,
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> ComputeBackend:
     """Create a compute backend by type."""
     match backend_type:
@@ -31,6 +33,10 @@ def create_backend(
             if not api_key:
                 raise ValueError("Fish Audio requires an API key")
             return FishAudioBackend(api_key=api_key)
+
+        case ComputeBackendType.GPT_SOVITS:
+            from backend.backends.gpt_sovits import GPTSoVITSBackend
+            return GPTSoVITSBackend(base_url=base_url or "http://127.0.0.1:9880")
 
         case _:
             raise ValueError(f"Unknown backend: {backend_type}")

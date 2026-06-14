@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     fish_audio_api_key: str = ""
 
+    # GPT-SoVITS
+    gpt_sovits_url: str = "http://127.0.0.1:9880"
+
     # i18n
     default_language: str = "zh"  # "zh" or "en"
 
