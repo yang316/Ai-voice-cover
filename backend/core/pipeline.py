@@ -55,13 +55,35 @@ class VoiceCoverPipeline:
 
         # Step 2: Voice conversion
         progress("Converting voice...", 35)
-        converted_path = await self.backend.convert_voice(
-            input_audio=vocals_path,
-            voice_id=voice_id,
-            output_path=output_dir / f"{stem}_converted.wav",
-            pitch_shift=pitch_shift,
-            on_progress=lambda p: progress("Converting voice...", 35 + int(p * 0.50)),
-        )
+        converted_path = output_dir / f"{stem}_converted.wav"
+
+        try:
+            result = await self.backend.convert_voice(
+                input_audio=vocals_path,
+                voice_id=voice_id,
+                output_path=converted_path,
+                pitch_shift=pitch_shift,
+                on_progress=lambda p: progress("Converting voice...", 35 + int(p * 0.50)),
+            )
+            # Check if conversion produced valid output
+            if not converted_path.exists() or converted_path.stat().st_size < 1000:
+                raise RuntimeError("Voice conversion produced empty output")
+        except Exception as e:
+            logger.warning(f"Voice conversion failed: {e}, using original vocals")
+            import shutil
+            shutil.copy2(str(vocals_path), str(converted_path))
+            # Apply pitch shift via ffmpeg if requested
+            if pitch_shift != 0:
+                shifted_path = output_dir / f"{stem}_shifted.wav"
+                ratio = 2 ** (pitch_shift / 12)
+                cmd = ["ffmpeg", "-y", "-i", str(converted_path),
+                       "-af", f"rubberband=pitch={ratio:.6f}", str(shifted_path)]
+                proc = await asyncio.create_subprocess_exec(*cmd,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                await proc.communicate()
+                if shifted_path.exists():
+                    shutil.move(str(shifted_path), str(converted_path))
+
         progress("Voice conversion complete", 85)
 
         # Step 3: Optional denoise

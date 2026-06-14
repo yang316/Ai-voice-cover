@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/cola/dev/ai-voice-cover/third_party/GPT-SoVITS/api_v2.py", line 124, in <module>
+    from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config
+  File "/home/cola/dev/ai-voice-cover/third_party/GPT-SoVITS/GPT_SoVITS/TTS_infer_pack/__init__.py", line 1, in <module>
+    from . import TTS, text_segmentation_method
+  File "/home/cola/dev/ai-voice-cover/third_party/GPT-SoVITS/GPT_SoVITS/TTS_infer_pack/TTS.py", line 24, in <module>
+    from AR.models.t2s_lightning_module import Text2SemanticLightningModule
+  File "/home/cola/dev/ai-voice-cover/third_party/GPT-SoVITS/GPT_SoVITS/AR/models/t2s_lightning_module.py", line 11, in <module>
+    from pytorch_lightning import LightningModule
+ModuleNotFoundError: No module named 'pytorch_lightning'
