@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 name = "ai_voice_cover_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]  # cdylib/staticlib needed for mobile
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
