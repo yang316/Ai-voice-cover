@@ -171,10 +171,8 @@ class FeatureExtractor:
         from transformers import HubertModel
 
         # Load HuBERT
-        hubert_path = Path("models/hubert_base.pt")
-        if not hubert_path.exists():
-            # Try converted transformers model
-            hubert_path = Path("models/hubert_base")
+        from backend.config import settings
+        hubert_path = settings.base_dir / "models" / "hubert_base.pt"
 
         if hubert_path.exists() and hubert_path.is_dir():
             model = HubertModel.from_pretrained(str(hubert_path))
@@ -182,7 +180,7 @@ class FeatureExtractor:
             # Load from fairseq checkpoint via converter
             from backend.core.rvc_infer import _load_hubert_from_fairseq
             device = torch.device("cpu")
-            model = _load_hubert_from_fairseq("models/hubert_base.pt", device)
+            model = _load_hubert_from_fairseq(str(hubert_path), device)
 
         model.eval()
         device = torch.device("cpu")
@@ -213,6 +211,7 @@ class FeatureExtractor:
 
     def _extract_f0(self, data_dir: Path, model_dir: Path, sample_rate: int):
         """Extract F0 (pitch) for all wavs."""
+        import soundfile as sf
         f0_dir = model_dir / "f0"
         f0_dir.mkdir(exist_ok=True)
 
