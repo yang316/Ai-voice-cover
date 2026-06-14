@@ -53,7 +53,11 @@ pub fn run() {
             let sidecar_name = if cfg!(target_os = "windows") {
                 "ai-voice-cover-server-x86_64-pc-windows-msvc.exe"
             } else if cfg!(target_os = "macos") {
-                "ai-voice-cover-server-apple-darwin"
+                if cfg!(target_arch = "aarch64") {
+                    "ai-voice-cover-server-aarch64-apple-darwin"
+                } else {
+                    "ai-voice-cover-server-x86_64-apple-darwin"
+                }
             } else {
                 "ai-voice-cover-server-x86_64-unknown-linux-gnu"
             };

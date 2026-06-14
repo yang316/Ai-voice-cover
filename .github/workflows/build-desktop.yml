@@ -99,7 +99,7 @@ jobs:
       - name: Build Python sidecar (universal)
         run: |
           pyinstaller --onefile \
-            --name ai-voice-cover-server-apple-darwin \
+            --name ai-voice-cover-server \
             --add-data backend:backend \
             --add-data frontend:frontend \
             --hidden-import uvicorn.logging \
@@ -114,7 +114,9 @@ jobs:
             --hidden-import uvicorn.lifespan.on \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
-          cp dist/ai-voice-cover-server-apple-darwin src-tauri/sidecar/
+          # Tauri expects sidecar named with target triple
+          cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-aarch64-apple-darwin
+          cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-x86_64-apple-darwin
 
       - name: Install Node.js deps
         run: npm install
