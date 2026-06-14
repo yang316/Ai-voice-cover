@@ -35,9 +35,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../frontend/**"
-    ],
+
     "externalBin": [
       "sidecar/ai-voice-cover-server"
     ],
