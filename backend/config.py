@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # GPT-SoVITS
     gpt_sovits_url: str = "http://127.0.0.1:9880"
 
+    # MiMo TTS
+    mimo_api_key: str = ""
+
+    # Training
+    models_dir: Path = base_dir / "models"
+
     # i18n
     default_language: str = "zh"  # "zh" or "en"
 
