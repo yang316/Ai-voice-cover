@@ -1281,6 +1281,112 @@
         .guide-content a:hover { text-decoration: underline; }
         .guide-link { margin-top: 0.5rem; font-size: 0.8125rem; }
         .guide-steps { margin-top: 0.25rem; }
+
+        /* ═══════════════════════════════════════════════
+           Tab Navigation
+           ═══════════════════════════════════════════════ */
+        .tab-nav {
+            display: flex;
+            gap: 0.25rem;
+            background: hsl(var(--muted));
+            border-radius: var(--radius);
+            padding: 0.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .tab-nav__btn {
+            flex: 1;
+            padding: 0.625rem 1rem;
+            border: none;
+            background: transparent;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: calc(var(--radius) - 2px);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .tab-nav__btn:hover {
+            color: hsl(var(--foreground));
+            background: hsla(0,0%,100%,0.05);
+        }
+        .tab-nav__btn.active {
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* TTS specific */
+        .tts-voice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .tts-voice-card {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: calc(var(--radius) - 2px);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.8125rem;
+        }
+        .tts-voice-card:hover { border-color: hsl(var(--primary)); }
+        .tts-voice-card.selected {
+            border-color: hsl(var(--primary));
+            background: hsla(263,70%,50.4%,0.1);
+        }
+        .tts-voice-card__name { font-weight: 600; }
+        .tts-voice-card__meta { font-size: 0.75rem; color: hsl(var(--muted-foreground)); }
+
+        /* Training specific */
+        .train-progress {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: hsl(var(--muted));
+            border-radius: var(--radius);
+        }
+        .train-progress__bar {
+            height: 8px;
+            background: hsl(var(--muted));
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .train-progress__fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .train-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+        .train-stat {
+            text-align: center;
+            padding: 0.5rem;
+            background: hsla(0,0%,100%,0.03);
+            border-radius: calc(var(--radius) - 2px);
+        }
+        .train-stat__value { font-size: 1.25rem; font-weight: 700; color: hsl(var(--primary)); }
+        .train-stat__label { font-size: 0.6875rem; color: hsl(var(--muted-foreground)); }
+
+        /* Audio player */
+        .audio-player {
+            width: 100%;
+            margin-top: 0.75rem;
+            border-radius: var(--radius);
+        }
     </style>
 </head>
 <body>
@@ -1302,6 +1408,25 @@
                 <span class="device-info__item" id="deviceGpu"></span>
                 <span class="device-info__item" id="deviceMem"></span>
             </div>
+
+            <!-- Tab Navigation -->
+            <nav class="tab-nav" role="tablist">
+                <button class="tab-nav__btn active" data-tab="cover" role="tab" aria-selected="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                    <span data-i18n="tabCover">翻唱</span>
+                </button>
+                <button class="tab-nav__btn" data-tab="tts" role="tab" aria-selected="false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>
+                    <span data-i18n="tabTts">语音合成</span>
+                </button>
+                <button class="tab-nav__btn" data-tab="train" role="tab" aria-selected="false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                    <span data-i18n="tabTrain">训练模型</span>
+                </button>
+            </nav>
+
+            <!-- ═══════ Tab: Cover (翻唱) ═══════ -->
+            <div class="tab-panel active" id="tab-cover" role="tabpanel">
 
             <!-- Upload Card -->
             <section class="glass-card" aria-labelledby="uploadTitle">
@@ -1456,6 +1581,127 @@
                     </button>
                 </div>
             </section>
+            </div> <!-- end tab-cover -->
+
+            <!-- ═══════ Tab: TTS (语音合成) ═══════ -->
+            <div class="tab-panel" id="tab-tts" role="tabpanel">
+                <section class="glass-card">
+                    <div class="glass-card__header">
+                        <svg class="glass-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                        <h2 class="glass-card__title">文字转语音</h2>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">输入文字</label>
+                        <textarea class="input" id="ttsText" rows="4" placeholder="输入要合成的文字..." style="resize:vertical;min-height:80px"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">选择语音</label>
+                        <div class="tts-voice-grid" id="ttsVoiceGrid">
+                            <div class="empty-state"><p>加载中...</p></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                        <div>
+                            <label class="form-label">语速 <span id="ttsSpeedVal">1.0</span></label>
+                            <input type="range" id="ttsSpeed" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%">
+                        </div>
+                        <div>
+                            <label class="form-label">音调 <span id="ttsPitchVal">0</span></label>
+                            <input type="range" id="ttsPitch" min="-1" max="1" step="0.1" value="0" style="width:100%">
+                        </div>
+                    </div>
+
+                    <button class="btn btn--primary" id="ttsSubmitBtn" style="width:100%">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        生成语音
+                    </button>
+
+                    <div id="ttsResult" style="display:none;margin-top:1rem">
+                        <audio id="ttsAudio" controls class="audio-player"></audio>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ═══════ Tab: Train (训练模型) ═══════ -->
+            <div class="tab-panel" id="tab-train" role="tabpanel">
+                <section class="glass-card">
+                    <div class="glass-card__header">
+                        <svg class="glass-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                        <h2 class="glass-card__title">训练语音模型</h2>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">模型名称</label>
+                        <input class="input" id="trainModelName" placeholder="my_voice" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">上传训练音频</label>
+                        <div class="upload-zone" id="trainUploadZone" style="min-height:80px">
+                            <input type="file" id="trainAudioFiles" accept="audio/*" multiple>
+                            <p class="upload-zone__text">
+                                <strong>点击上传</strong> 或拖放<br>
+                                <span style="font-size:0.75rem;color:hsl(var(--muted-foreground))">支持多个音频文件，建议每个 5-15 秒</span>
+                            </p>
+                        </div>
+                        <div id="trainFileInfo" style="display:none;margin-top:0.5rem"></div>
+                    </div>
+
+                    <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                        <div>
+                            <label class="form-label">训练轮次</label>
+                            <input class="input" id="trainEpoch" type="number" value="200" min="10" max="1000">
+                        </div>
+                        <div>
+                            <label class="form-label">批次大小</label>
+                            <input class="input" id="trainBatch" type="number" value="4" min="1" max="32">
+                        </div>
+                    </div>
+
+                    <button class="btn btn--primary" id="trainSubmitBtn" style="width:100%">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                        开始训练
+                    </button>
+
+                    <div class="train-progress" id="trainProgress" style="display:none">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span id="trainStatus" style="font-weight:600">准备中...</span>
+                            <span id="trainPct" style="color:hsl(var(--primary));font-weight:700">0%</span>
+                        </div>
+                        <div class="train-progress__bar">
+                            <div class="train-progress__fill" id="trainFill" style="width:0%"></div>
+                        </div>
+                        <div class="train-stats">
+                            <div class="train-stat">
+                                <div class="train-stat__value" id="trainEpoch">0</div>
+                                <div class="train-stat__label">Epoch</div>
+                            </div>
+                            <div class="train-stat">
+                                <div class="train-stat__value" id="trainLoss">-</div>
+                                <div class="train-stat__label">Loss</div>
+                            </div>
+                            <div class="train-stat">
+                                <div class="train-stat__value" id="trainEta">-</div>
+                                <div class="train-stat__label">预计剩余</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Training History -->
+                <section class="glass-card" style="margin-top:1rem">
+                    <div class="glass-card__header">
+                        <h2 class="glass-card__title">训练记录</h2>
+                    </div>
+                    <div id="trainHistory">
+                        <div class="empty-state"><p>暂无训练记录</p></div>
+                    </div>
+                </section>
+            </div>
+
         </div>
 
         <!-- ═══════ Sidebar ═══════ -->
@@ -2653,6 +2899,225 @@
 
             // Periodic health check
             setInterval(checkHealth, 30000);
+
+            // Tab navigation
+            initTabs();
+            initTTS();
+            initTraining();
+        }
+
+        /* ═══════════════════════════════════════════════
+           Tab Navigation
+           ═══════════════════════════════════════════════ */
+        function initTabs() {
+            document.querySelectorAll('.tab-nav__btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-nav__btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+                });
+            });
+        }
+
+        /* ═══════════════════════════════════════════════
+           TTS
+           ═══════════════════════════════════════════════ */
+        let ttsVoices = [];
+        let selectedTtsVoice = 'zh-CN-XiaoxiaoNeural';
+
+        async function initTTS() {
+            // Load voices
+            try {
+                const resp = await fetch('/api/v1/tts/voices');
+                ttsVoices = await resp.json();
+                renderTtsVoices();
+            } catch (e) {
+                console.error('Failed to load TTS voices:', e);
+            }
+
+            // Slider events
+            document.getElementById('ttsSpeed').addEventListener('input', e => {
+                document.getElementById('ttsSpeedVal').textContent = e.target.value;
+            });
+            document.getElementById('ttsPitch').addEventListener('input', e => {
+                document.getElementById('ttsPitchVal').textContent = e.target.value;
+            });
+
+            // Submit
+            document.getElementById('ttsSubmitBtn').addEventListener('click', synthesizeTTS);
+        }
+
+        function renderTtsVoices() {
+            const grid = document.getElementById('ttsVoiceGrid');
+            grid.innerHTML = ttsVoices.map(v => `
+                <div class="tts-voice-card ${v.id === selectedTtsVoice ? 'selected' : ''}" data-voice="${v.id}">
+                    <div class="tts-voice-card__name">${v.name}</div>
+                    <div class="tts-voice-card__meta">${v.language} · ${v.gender === 'female' ? '♀' : '♂'}</div>
+                </div>
+            `).join('');
+
+            grid.querySelectorAll('.tts-voice-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    grid.querySelectorAll('.tts-voice-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    selectedTtsVoice = card.dataset.voice;
+                });
+            });
+        }
+
+        async function synthesizeTTS() {
+            const text = document.getElementById('ttsText').value.trim();
+            if (!text) return alert('请输入文字');
+
+            const btn = document.getElementById('ttsSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+
+            try {
+                const resp = await fetch('/api/v1/tts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        text,
+                        voice_id: selectedTtsVoice,
+                        speed: parseFloat(document.getElementById('ttsSpeed').value),
+                        pitch: parseFloat(document.getElementById('ttsPitch').value),
+                    }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    const resultDiv = document.getElementById('ttsResult');
+                    const audio = document.getElementById('ttsAudio');
+                    audio.src = data.audio_url;
+                    resultDiv.style.display = 'block';
+                } else {
+                    alert('生成失败: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> 生成语音';
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+           Training
+           ═══════════════════════════════════════════════ */
+        let trainTaskId = null;
+        let trainPollTimer = null;
+
+        function initTraining() {
+            // File upload display
+            document.getElementById('trainAudioFiles').addEventListener('change', e => {
+                const files = e.target.files;
+                if (files.length) {
+                    const info = document.getElementById('trainFileInfo');
+                    info.style.display = 'block';
+                    info.innerHTML = Array.from(files).map(f =>
+                        `<div style="font-size:0.8125rem;color:hsl(var(--muted-foreground))">📎 ${f.name} (${(f.size/1024/1024).toFixed(1)}MB)</div>`
+                    ).join('');
+                }
+            });
+
+            // Submit
+            document.getElementById('trainSubmitBtn').addEventListener('click', startTraining);
+
+            // Load history
+            loadTrainHistory();
+        }
+
+        async function startTraining() {
+            const name = document.getElementById('trainModelName').value.trim();
+            if (!name) return alert('请输入模型名称');
+
+            const files = document.getElementById('trainAudioFiles').files;
+            if (!files.length) return alert('请上传训练音频');
+
+            const btn = document.getElementById('trainSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+
+            const formData = new FormData();
+            formData.append('model_name', name);
+            formData.append('epoch', document.getElementById('trainEpoch').value);
+            formData.append('batch_size', document.getElementById('trainBatch').value);
+            for (const f of files) {
+                formData.append('audio_files', f);
+            }
+
+            try {
+                const resp = await fetch('/api/v1/train', {method: 'POST', body: formData});
+                const data = await resp.json();
+                if (resp.ok) {
+                    trainTaskId = data.task_id;
+                    document.getElementById('trainProgress').style.display = 'block';
+                    document.getElementById('trainStatus').textContent = '训练已启动...';
+                    pollTraining();
+                } else {
+                    alert('提交失败: ' + (data.detail || JSON.stringify(data)));
+                }
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '开始训练';
+            }
+        }
+
+        async function pollTraining() {
+            if (!trainTaskId) return;
+            try {
+                const resp = await fetch(`/api/v1/train/${trainTaskId}`);
+                const data = await resp.json();
+                const pct = data.progress_pct || 0;
+
+                document.getElementById('trainStatus').textContent = data.message;
+                document.getElementById('trainPct').textContent = pct + '%';
+                document.getElementById('trainFill').style.width = pct + '%';
+
+                // Update stats
+                const epochEl = document.getElementById('trainEpoch');
+                const lossEl = document.getElementById('trainLoss');
+                if (epochEl) epochEl.textContent = data.epoch || 0;
+                if (lossEl) lossEl.textContent = data.loss ? data.loss.toFixed(4) : '-';
+
+                if (data.status !== 'completed' && data.status !== 'failed') {
+                    trainPollTimer = setTimeout(pollTraining, 3000);
+                } else if (data.status === 'completed') {
+                    document.getElementById('trainStatus').textContent = '✅ 训练完成！';
+                    loadTrainHistory();
+                } else {
+                    document.getElementById('trainStatus').textContent = '❌ ' + data.message;
+                }
+            } catch (e) {
+                console.error('Poll training error:', e);
+                trainPollTimer = setTimeout(pollTraining, 5000);
+            }
+        }
+
+        async function loadTrainHistory() {
+            try {
+                const resp = await fetch('/api/v1/train');
+                const tasks = await resp.json();
+                const container = document.getElementById('trainHistory');
+                if (!tasks.length) {
+                    container.innerHTML = '<div class="empty-state"><p>暂无训练记录</p></div>';
+                    return;
+                }
+                container.innerHTML = tasks.map(t => `
+                    <div style="padding:0.75rem;margin-bottom:0.5rem;background:hsl(var(--muted));border-radius:var(--radius);font-size:0.8125rem">
+                        <div style="display:flex;justify-content:space-between">
+                            <strong>${t.task_id}</strong>
+                            <span style="color:${t.status==='completed'?'hsl(142,71%,45%)':t.status==='failed'?'hsl(0,62.8%,30.6%)':'hsl(var(--primary))'}">${t.status}</span>
+                        </div>
+                        <div style="margin-top:0.25rem;color:hsl(var(--muted-foreground))">${t.message}</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Load train history error:', e);
+            }
         }
 
         document.addEventListener('DOMContentLoaded', init);
