@@ -1,7 +1,8 @@
 // AI Voice Cover - Tauri Backend
 // Manages the Python sidecar process and provides native APIs
 
-use std::process::{Command, Child};
+use std::net::TcpListener;
+use std::process::{Child, Command};
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -48,7 +49,7 @@ pub fn run() {
             port: Mutex::new(port),
         })
         .setup(move |app| {
-            // Start Python sidecar
+            // Determine sidecar binary name per platform
             let sidecar_name = if cfg!(target_os = "windows") {
                 "ai-voice-cover-server-x86_64-pc-windows-msvc.exe"
             } else if cfg!(target_os = "macos") {
@@ -61,7 +62,8 @@ pub fn run() {
                 "ai-voice-cover-server-x86_64-unknown-linux-gnu"
             };
 
-            let sidecar_path = app.path()
+            let sidecar_path = app
+                .path()
                 .resource_dir()
                 .unwrap()
                 .join("sidecar")
@@ -75,19 +77,21 @@ pub fn run() {
 
                 *app.state::<AppState>().sidecar.lock().unwrap() = Some(child);
 
-                // Wait for backend to be ready
+                // Wait for backend to be ready (up to 30s)
                 std::thread::spawn(move || {
                     for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));
-                        if let Ok(_stream) = std::net::TcpStream::connect(("127.0.0.1", port)) {
-                            drop(_stream);
+                        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
                             break;
                         }
                     }
                 });
             } else {
                 // Dev mode - assume backend is running externally
-                println!("Sidecar not found at {:?}, using external backend", sidecar_path);
+                println!(
+                    "Sidecar not found at {:?}, using external backend",
+                    sidecar_path
+                );
             }
 
             Ok(())
