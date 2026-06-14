@@ -25,6 +25,9 @@ assets/
 *.pth
 *.pt
 *.onnx
+
+# Third party (installed separately)
+third_party/
 *.AppImage
 *.dmg
 *.msi

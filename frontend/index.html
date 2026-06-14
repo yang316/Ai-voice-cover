@@ -1520,18 +1520,24 @@
                 <details class="guide-section">
                     <summary class="guide-summary">🎤 GPT-SoVITS（本地部署，效果最好）</summary>
                     <div class="guide-content">
-                        <p><strong>开源免费</strong>，中文效果最好，5秒音频即可克隆。</p>
+                        <p><strong>开源免费</strong>，中文效果最好，5秒音频即可克隆。已集成到项目中。</p>
                         <div class="guide-steps">
-                            <h4>安装步骤：</h4>
+                            <h4>一键安装：</h4>
                             <ol>
-                                <li>克隆仓库：<code>git clone https://github.com/RVC-Boss/GPT-SoVITS.git</code></li>
-                                <li>安装依赖：<code>pip install -r requirements.txt</code></li>
-                                <li>启动 API 服务：<br><code>python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml</code></li>
+                                <li>安装： <code>bash scripts/setup_gpt_sovits.sh install</code></li>
+                                <li>下载模型：<code>bash scripts/setup_gpt_sovits.sh download</code></li>
+                                <li>启动服务：<code>bash scripts/setup_gpt_sovits.sh start</code></li>
                                 <li>在左侧设置中选择 <strong>GPT-SoVITS</strong> 后端</li>
                             </ol>
+                            <h4>管理命令：</h4>
+                            <ul>
+                                <li><code>bash scripts/setup_gpt_sovits.sh status</code> — 查看状态</li>
+                                <li><code>bash scripts/setup_gpt_sovits.sh stop</code> — 停止服务</li>
+                                <li><code>bash scripts/setup_gpt_sovits.sh restart</code> — 重启</li>
+                            </ul>
                             <h4>训练自己的模型：</h4>
                             <ol>
-                                <li>启动 WebUI：<code>python webui.py</code></li>
+                                <li>启动 WebUI：<code>cd third_party/GPT-SoVITS && python webui.py</code></li>
                                 <li>上传 5~10 秒参考音频</li>
                                 <li>填写对应文字，选择语言</li>
                                 <li>点击训练，完成后自动可用</li>
@@ -1594,7 +1600,7 @@
                             <h4>使用方法：</h4>
                             <ol>
                                 <li>点击左侧 <strong>一键下载基础模型</strong>（首次使用）</li>
-                                <li>从 <a href="https://weights.gg" target="_blank">weights.gg</a> 或 <a href="https://voice-models.com" target="_blank">voice-models.com</a> 下载人声模型</li>
+                                <li>从 <a href="https://voice-models.com" target="_blank">voice-models.com</a>（27,900+ 模型）或 <a href="https://hf-mirror.com/models?search=rvc" target="_blank">HuggingFace 镜像站</a> 下载人声模型</li>
                                 <li>将模型文件夹放到 <code>voices/</code> 目录</li>
                                 <li>在音色模型下拉菜单中选择</li>
                             </ol>

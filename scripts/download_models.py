@@ -145,10 +145,9 @@ def show_guide():
     │   └── xxx.index  ← 可选 (提升质量)
 
 推荐网站:
-  1. weights.gg       — https://weights.gg
-  2. voice-models.com — https://voice-models.com (27,900+ 模型)
-  3. HuggingFace      — python scripts/download_models.py --voice <repo_id>
-  4. B站 / QQ 群      — 中文歌手模型
+  1. voice-models.com — https://voice-models.com (27,900+ 模型)
+  2. HuggingFace 镜像 — https://hf-mirror.com/models?search=rvc
+  3. B站 / QQ 群      — 中文歌手模型主要在这里
 """)
 
 
