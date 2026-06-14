@@ -80,8 +80,6 @@ class LocalGPUBackend(ComputeBackend):
 
     async def health_check(self) -> bool:
         """Check if local GPU is available."""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
+        from backend.core.device import get_device_info
+        info = get_device_info()
+        return info["best_device"] != "cpu"

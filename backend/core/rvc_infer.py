@@ -20,10 +20,10 @@ _hubert_model = None
 
 
 def get_device() -> torch.device:
-    """Get the best available device."""
-    if torch.cuda.is_available():
-        return torch.device("cuda:0")
-    return torch.device("cpu")
+    """Get the best available device (delegates to unified device module)."""
+    from backend.core.device import get_device as _get_device
+    dev = _get_device()
+    return dev if dev is not None else torch.device("cpu")
 
 
 def load_hubert(model_path: str | None = None) -> torch.nn.Module:
