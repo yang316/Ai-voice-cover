@@ -66,10 +66,11 @@ class DataPreparer:
     ) -> Path:
         """
         Prepare training data:
-        1. Convert to WAV mono
-        2. Resample to target_sr
-        3. Cut into segments (5-15s)
-        4. Optional denoise
+        1. Auto vocal separation with Demucs
+        2. Convert to WAV mono
+        3. Resample to target_sr
+        4. Cut into segments (5-15s)
+        5. Optional denoise
         Returns: directory of prepared wavs
         """
         output_dir = self.work_dir / "44k"
@@ -91,10 +92,15 @@ class DataPreparer:
         """Process a single audio file into training segments."""
         import soundfile as sf
 
-        # Load audio
+        # Load audio (preserve original channels for Demucs)
         audio, sr = sf.read(str(audio_path), dtype="float32")
+
+        # Auto vocal separation with Demucs
+        audio = self._separate_vocals(audio, sr, audio_path)
+
+        # Convert to mono after separation
         if audio.ndim > 1:
-            audio = audio.mean(axis=1)  # Mono
+            audio = audio.mean(axis=1)
 
         # Resample if needed
         if sr != target_sr:
@@ -129,6 +135,50 @@ class DataPreparer:
             seg_idx += 1
             pos += hop_len
 
+    def _separate_vocals(self, audio: np.ndarray, sr: int, audio_path: Path) -> np.ndarray:
+        """Use Demucs to extract vocals. Returns mono vocal track."""
+        try:
+            import torch
+            from demucs.pretrained import get_model
+            from demucs.apply import apply_model
+
+            logger.info(f"Separating vocals with Demucs: {audio_path.name}")
+
+            # Demucs htdemucs expects 44100 Hz stereo, shape (batch, channels, samples)
+            if audio.ndim == 1:
+                audio_tensor = torch.from_numpy(audio).unsqueeze(0).unsqueeze(0).float()
+            else:
+                audio_tensor = torch.from_numpy(audio.T).unsqueeze(0).float()
+
+            # Resample to 44100 if needed (Demucs native rate)
+            if sr != 44100:
+                import torchaudio
+                audio_tensor = torchaudio.functional.resample(audio_tensor, sr, 44100)
+
+            # Pad to stereo if mono
+            if audio_tensor.shape[1] == 1:
+                audio_tensor = audio_tensor.repeat(1, 2, 1)
+
+            model = get_model("htdemucs")
+            sources = apply_model(model, audio_tensor, device="cpu")
+            # sources shape: (batch, sources, channels, samples) — order: drums, bass, other, vocals
+            vocals = sources[0, -1]  # vocals track
+            vocals_np = vocals.mean(dim=0).numpy()  # mix to mono
+
+            # Resample back to original sr
+            if sr != 44100:
+                import torchaudio
+                vt = torch.from_numpy(vocals_np).unsqueeze(0).float()
+                vt = torchaudio.functional.resample(vt, 44100, sr)
+                vocals_np = vt.squeeze(0).numpy()
+
+            logger.info("Vocal separation complete")
+            return vocals_np
+
+        except Exception as e:
+            logger.warning(f"Demucs vocal separation failed, using original audio: {e}")
+            return audio
+
 
 class FeatureExtractor:
     """Extract HuBERT + F0 features for RVC training."""
@@ -142,6 +192,7 @@ class FeatureExtractor:
         data_dir: Path,
         sample_rate: int = 40000,
         pitch_guidance: bool = True,
+        on_progress=None,
     ) -> Path:
         """Extract features from prepared wavs."""
         from backend.config import settings
@@ -152,7 +203,7 @@ class FeatureExtractor:
 
         logger.info("Extracting HuBERT features...")
         await asyncio.to_thread(
-            self._extract_hubert, data_dir, model_dir
+            self._extract_hubert, data_dir, model_dir, on_progress
         )
 
         if pitch_guidance:
@@ -164,7 +215,7 @@ class FeatureExtractor:
         logger.info("Feature extraction complete")
         return model_dir
 
-    def _extract_hubert(self, data_dir: Path, model_dir: Path):
+    def _extract_hubert(self, data_dir: Path, model_dir: Path, on_progress=None):
         """Extract HuBERT features for all wavs."""
         import torch
         import soundfile as sf
@@ -208,6 +259,8 @@ class FeatureExtractor:
 
             if (i + 1) % 10 == 0:
                 logger.info(f"  HuBERT: {i+1}/{len(wav_files)}")
+                if on_progress:
+                    on_progress(f"HuBERT: {i+1}/{len(wav_files)}")
 
     def _extract_f0(self, data_dir: Path, model_dir: Path, sample_rate: int):
         """Extract F0 (pitch) for all wavs."""
@@ -345,9 +398,28 @@ class RVCTrainer:
 
                 return feat, f0
 
+        def collate_fn(batch):
+            """Pad features and f0 to max length in batch."""
+            feats, f0s = zip(*batch)
+            max_len = max(f.shape[0] for f in feats)
+            feat_dim = feats[0].shape[1] if feats[0].ndim > 1 else 1
+
+            padded_feats = []
+            padded_f0s = []
+            for feat, f0 in zip(feats, f0s):
+                pad_len = max_len - feat.shape[0]
+                if pad_len > 0:
+                    feat = torch.nn.functional.pad(feat, (0, 0, 0, pad_len))
+                    f0 = torch.nn.functional.pad(f0, (0, pad_len))
+                padded_feats.append(feat)
+                padded_f0s.append(f0)
+
+            return torch.stack(padded_feats), torch.stack(padded_f0s)
+
         has_f0 = f0_dir.exists() and len(list(f0_dir.glob("*.npy"))) > 0
         dataset = VoiceDataset(feat_files, f0_dir, has_f0)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                                drop_last=True, collate_fn=collate_fn)
 
         # Simple autoencoder for feature refinement
         input_dim = 768  # HuBERT hidden size

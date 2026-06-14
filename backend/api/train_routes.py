@@ -118,10 +118,14 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
 
         # Step 2: Extract features
         progress.status = TrainingStatus.EXTRACTING
-        progress.message = "Extracting features..."
+        progress.message = "Extracting HuBERT features..."
 
         extractor = FeatureExtractor(work_dir, config.f0_method)
-        model_dir = await extractor.extract(data_dir, config.sample_rate, config.pitch_guidance)
+
+        def on_extract(msg):
+            progress.message = msg
+
+        model_dir = await extractor.extract(data_dir, config.sample_rate, config.pitch_guidance, on_extract)
 
         # Step 3: Train
         progress.status = TrainingStatus.TRAINING
