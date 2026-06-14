@@ -44,6 +44,11 @@ jobs:
             --name ai-voice-cover-server \
             --add-data backend:backend \
             --add-data frontend:frontend \
+            --collect-submodules backend \
+            --hidden-import fastapi \
+            --hidden-import fastapi.middleware.cors \
+            --hidden-import fastapi.staticfiles \
+            --hidden-import uvicorn \
             --hidden-import uvicorn.logging \
             --hidden-import uvicorn.loops \
             --hidden-import uvicorn.loops.auto \
@@ -54,6 +59,14 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto \
             --hidden-import uvicorn.lifespan \
             --hidden-import uvicorn.lifespan.on \
+            --hidden-import pydantic \
+            --hidden-import pydantic_settings \
+            --hidden-import httpx \
+            --hidden-import soundfile \
+            --hidden-import numpy \
+            --hidden-import redis \
+            --hidden-import celery \
+            --hidden-import multipart \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-x86_64-unknown-linux-gnu
@@ -100,6 +113,11 @@ jobs:
             --name ai-voice-cover-server \
             --add-data backend:backend \
             --add-data frontend:frontend \
+            --collect-submodules backend \
+            --hidden-import fastapi \
+            --hidden-import fastapi.middleware.cors \
+            --hidden-import fastapi.staticfiles \
+            --hidden-import uvicorn \
             --hidden-import uvicorn.logging \
             --hidden-import uvicorn.loops \
             --hidden-import uvicorn.loops.auto \
@@ -110,6 +128,14 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto \
             --hidden-import uvicorn.lifespan \
             --hidden-import uvicorn.lifespan.on \
+            --hidden-import pydantic \
+            --hidden-import pydantic_settings \
+            --hidden-import httpx \
+            --hidden-import soundfile \
+            --hidden-import numpy \
+            --hidden-import redis \
+            --hidden-import celery \
+            --hidden-import multipart \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-aarch64-apple-darwin
@@ -154,6 +180,11 @@ jobs:
             --name ai-voice-cover-server \
             --add-data "backend;backend" \
             --add-data "frontend;frontend" \
+            --collect-submodules backend \
+            --hidden-import fastapi \
+            --hidden-import fastapi.middleware.cors \
+            --hidden-import fastapi.staticfiles \
+            --hidden-import uvicorn \
             --hidden-import uvicorn.logging \
             --hidden-import uvicorn.loops \
             --hidden-import uvicorn.loops.auto \
@@ -164,6 +195,14 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto \
             --hidden-import uvicorn.lifespan \
             --hidden-import uvicorn.lifespan.on \
+            --hidden-import pydantic \
+            --hidden-import pydantic_settings \
+            --hidden-import httpx \
+            --hidden-import soundfile \
+            --hidden-import numpy \
+            --hidden-import redis \
+            --hidden-import celery \
+            --hidden-import multipart \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server.exe src-tauri/sidecar/ai-voice-cover-server-x86_64-pc-windows-msvc.exe
