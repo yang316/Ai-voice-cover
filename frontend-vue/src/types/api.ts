@@ -5,16 +5,20 @@ export interface Voice {
   description?: string
   modelPath: string
   indexPath?: string
+  source?: string
 }
 
 export interface Task {
   id: string
+  task_id: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   progress: number
   step: 'separating' | 'converting' | 'mixing' | 'complete'
   createdAt: string
   resultUrl?: string
   error?: string
+  type?: string
+  message?: string
 }
 
 export interface HealthStatus {

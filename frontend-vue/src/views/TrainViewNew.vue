@@ -159,14 +159,12 @@ import { ref, computed, inject, watch } from 'vue'
 import { NForm, NFormItem, NInput, NInputNumber, NButton, NProgress, NSpace, NUpload, NDivider } from 'naive-ui'
 import type { MessageApiInjection } from 'naive-ui/es/message/src/MessageProvider'
 import { useTasksStore } from '@/stores/tasks'
-import { useApi } from '@/composables/useApi'
 import { useI18n } from '@/composables/useI18n'
 
 const emit = defineEmits(['processing-change'])
 
 const message = inject<MessageApiInjection>('message')
 const tasksStore = useTasksStore()
-const api = useApi()
 const { t } = useI18n()
 
 const modelName = ref('')
