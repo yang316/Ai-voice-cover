@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.routes import router as covers_router
 from backend.api.voice_routes import router as voices_router
 from backend.api.hf_routes import router as hf_router
+from backend.api.model_routes import router as models_router
 from backend.config import settings
 
 
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(covers_router, prefix="/api/v1", tags=["covers"])
 app.include_router(voices_router, prefix="/api/v1", tags=["voices"])
 app.include_router(hf_router, prefix="/api/v1", tags=["huggingface"])
+app.include_router(models_router, prefix="/api/v1", tags=["models"])
 
 # Serve frontend
 frontend_dir = settings.base_dir / "frontend"
