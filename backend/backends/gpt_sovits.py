@@ -1,4 +1,5 @@
 """GPT-SoVITS backend for voice conversion and TTS."""
+from typing import Callable, Optional
 import asyncio
 import logging
 from pathlib import Path
@@ -22,7 +23,7 @@ class GPTSoVITSBackend(ComputeBackend):
         voice_id: str,
         output_path: Path,
         pitch_shift: int = 0,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
         text: str = "",
         text_lang: str = "zh",
         prompt_text: str = "",

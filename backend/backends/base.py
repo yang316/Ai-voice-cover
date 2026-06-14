@@ -1,6 +1,7 @@
 """Abstract compute backend interface."""
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Callable, Optional
 
 
 class ComputeBackend(ABC):
@@ -13,7 +14,7 @@ class ComputeBackend(ABC):
         voice_id: str,
         output_path: Path,
         pitch_shift: int = 0,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
     ) -> Path:
         """
         Convert voice in input_audio to target voice_id.

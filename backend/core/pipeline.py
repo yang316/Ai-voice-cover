@@ -1,4 +1,5 @@
 """Main pipeline: vocal separation -> voice conversion -> mixing."""
+from typing import Callable, Optional
 import logging
 from pathlib import Path
 
@@ -24,7 +25,7 @@ class VoiceCoverPipeline:
         output_dir: str | Path,
         pitch_shift: int = 0,
         denoise: bool = True,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
     ) -> Path:
         """
         Run the full pipeline.

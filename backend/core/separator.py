@@ -29,10 +29,14 @@ class VocalSeparator:
             logger.info("Using cached separated files")
             return vocals_path, accomp_path
 
-        # Run Demucs in subprocess to avoid blocking
         import sys
+        from pathlib import Path as _P
+
+        # Use wrapper script that patches torchaudio.save to use soundfile
+        wrapper = str(_P(__file__).parent.parent.parent / "scripts" / "demucs_wrapper.py")
+
         cmd = [
-            sys.executable, "-m", "demucs",
+            sys.executable, wrapper,
             "--two-stems", "vocals",
             "-n", self.model_name,
             "-o", str(output_dir),
@@ -49,11 +53,10 @@ class VocalSeparator:
         if proc.returncode != 0:
             raise RuntimeError(f"Demucs failed: {stderr.decode()}")
 
-        # Demucs output structure: output_dir / model_name / stem / vocals.wav
+        # Demucs output: output_dir / model_name / stem / vocals.wav
         stem = input_path.stem
         demucs_out = output_dir / self.model_name / stem
 
-        # Move files to expected locations
         import shutil
         voc = demucs_out / "vocals.wav"
         no_voc = demucs_out / "no_vocals.wav"
@@ -66,7 +69,6 @@ class VocalSeparator:
         if no_voc.exists():
             shutil.move(str(no_voc), str(accomp_path))
 
-        # Cleanup demucs subdirectory
         shutil.rmtree(output_dir / self.model_name, ignore_errors=True)
 
         return vocals_path, accomp_path

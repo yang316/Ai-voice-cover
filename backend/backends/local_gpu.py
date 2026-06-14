@@ -1,4 +1,5 @@
 """Local GPU backend using RVC for voice conversion."""
+from typing import Callable, Optional
 import asyncio
 import logging
 from pathlib import Path
@@ -20,7 +21,7 @@ class LocalGPUBackend(ComputeBackend):
         voice_id: str,
         output_path: Path,
         pitch_shift: int = 0,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
     ) -> Path:
         """Convert voice using RVC inference."""
         import asyncio

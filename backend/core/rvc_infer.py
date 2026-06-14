@@ -1,31 +1,157 @@
 """RVC (Retrieval-based Voice Conversion) inference module.
 
-Supports loading pre-trained RVC models (.pth) and running voice conversion
-with optional FAISS index retrieval for better quality.
+Uses transformers HuBERT + RVC Pipeline for real voice conversion.
 """
 import logging
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
+import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
-# Model cache to avoid reloading
-_model_cache: dict[str, dict] = {}
+# Add rvc module to path
+_rvc_dir = Path(__file__).parent / "rvc"
+if str(_rvc_dir) not in sys.path:
+    sys.path.insert(0, str(_rvc_dir))
+
+# Model cache
+_model_cache: dict = {}
 _hubert_model = None
+_pipeline = None
+
+
+class _HubertAdapter:
+    """Adapter to make transformers HuBERT compatible with RVC Pipeline's fairseq interface."""
+
+    def __init__(self, model):
+        self._model = model
+
+    def extract_features(self, source, padding_mask=None, output_layer=None):
+        with torch.no_grad():
+            feats = self._model(source).last_hidden_state
+        return [feats]
+
+    def final_proj(self, feats):
+        return feats
+
+    def to(self, device):
+        self._model = self._model.to(device)
+        return self
+
+    def eval(self):
+        self._model = self._model.eval()
+        return self
+
+    def half(self):
+        self._model = self._model.half()
+        return self
+
+    def float(self):
+        self._model = self._model.float()
+        return self
+
+    def parameters(self):
+        return self._model.parameters()
 
 
 def get_device() -> torch.device:
-    """Get the best available device (delegates to unified device module)."""
-    from backend.core.device import get_device as _get_device
-    dev = _get_device()
-    return dev if dev is not None else torch.device("cpu")
+    """Get best available device."""
+    try:
+        from backend.core.device import get_device as _get_device
+        dev = _get_device()
+        return dev if dev is not None else torch.device("cpu")
+    except Exception:
+        return torch.device("cpu")
 
 
-def load_hubert(model_path: str | None = None) -> torch.nn.Module:
+def _load_hubert_from_fairseq(ckpt_path: str, device: torch.device):
+    """Load fairseq HuBERT checkpoint into transformers HuBERT model."""
+    import types as _types
+    from transformers import HubertModel, HubertConfig
+
+    # Create fake fairseq modules so torch.load can unpickle
+    for mod_name in ['fairseq', 'fairseq.models', 'fairseq.models.hubert',
+                     'fairseq.models.hubert.hubert', 'fairseq.data',
+                     'fairseq.data.dictionary', 'fairseq.tasks',
+                     'fairseq.tasks.hubert_pretraining']:
+        mod = _types.ModuleType(mod_name)
+        mod.__dict__['__path__'] = []
+        sys.modules[mod_name] = mod
+
+    class _Dummy:
+        pass
+
+    sys.modules['fairseq.models.hubert.hubert'].HuBERTModel = _Dummy
+    sys.modules['fairseq.data.dictionary'].Dictionary = _Dummy
+    sys.modules['fairseq.tasks.hubert_pretraining'].HubertPretrainingTask = _Dummy
+
+    cpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    fairseq_sd = cpt['model']
+
+    # Create transformers HuBERT with matching architecture
+    config = HubertConfig(
+        hidden_size=768, num_hidden_layers=12, num_attention_heads=12,
+        intermediate_size=3072,
+        conv_dim=(512, 512, 512, 512, 512, 512, 512),
+        conv_stride=(5, 2, 2, 2, 2, 2, 2),
+        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
+        feat_extract_norm="group", feat_extract_activation="gelu",
+        num_conv_pos_embeddings=128, num_conv_pos_embedding_groups=16,
+        hidden_act="gelu", vocab_size=32,
+    )
+    model = HubertModel(config)
+    hf_sd = model.state_dict()
+
+    # Key mappings: fairseq -> transformers
+    key_map = {
+        'self_attn.': 'attention.',
+        'self_attn_layer_norm.': 'layer_norm.',
+        'fc1.': 'feed_forward.intermediate_dense.',
+        'fc2.': 'feed_forward.output_dense.',
+    }
+    fe_map = {}
+    for i in range(7):
+        fe_map[f'feature_extractor.conv_layers.{i}.0.weight'] = f'feature_extractor.conv_layers.{i}.conv.weight'
+        fe_map[f'feature_extractor.conv_layers.{i}.0.bias'] = f'feature_extractor.conv_layers.{i}.conv.bias'
+        fe_map[f'feature_extractor.conv_layers.{i}.2.weight'] = f'feature_extractor.conv_layers.{i}.layer_norm.weight'
+        fe_map[f'feature_extractor.conv_layers.{i}.2.bias'] = f'feature_extractor.conv_layers.{i}.layer_norm.bias'
+    extra_map = {
+        'post_extract_proj.weight': 'feature_projection.projection.weight',
+        'post_extract_proj.bias': 'feature_projection.projection.bias',
+        'layer_norm.weight': 'feature_projection.layer_norm.weight',
+        'layer_norm.bias': 'feature_projection.layer_norm.bias',
+        'encoder.pos_conv.0.weight_g': 'encoder.pos_conv_embed.conv.parametrizations.weight.original0',
+        'encoder.pos_conv.0.weight_v': 'encoder.pos_conv_embed.conv.parametrizations.weight.original1',
+        'encoder.pos_conv.0.bias': 'encoder.pos_conv_embed.conv.bias',
+    }
+
+    new_sd = {}
+    for fkey, value in fairseq_sd.items():
+        if fkey in fe_map:
+            hkey = fe_map[fkey]
+        elif fkey in extra_map:
+            hkey = extra_map[fkey]
+        else:
+            hkey = fkey
+            for old, new in key_map.items():
+                if old in hkey:
+                    hkey = hkey.replace(old, new)
+                    break
+        if hkey in hf_sd and hf_sd[hkey].shape == value.shape:
+            new_sd[hkey] = value
+
+    model.load_state_dict(new_sd, strict=False)
+    model = model.to(device).eval()
+    logger.info(f"Loaded HuBERT from fairseq checkpoint ({len(new_sd)} keys)")
+    return model
+
+
+def load_hubert():
     """Load HuBERT model for feature extraction."""
     global _hubert_model
     if _hubert_model is not None:
@@ -33,88 +159,141 @@ def load_hubert(model_path: str | None = None) -> torch.nn.Module:
 
     device = get_device()
 
-    # Try to load from local path or download
-    if model_path and Path(model_path).exists():
-        _hubert_model = torch.load(model_path, map_location=device)
-    else:
-        # Use transformers HubertModel as fallback
+    # Load from local fairseq checkpoint (converted to transformers format)
+    local_path = Path(__file__).parent.parent.parent / "assets" / "hubert" / "hubert_base.pt"
+    if local_path.exists():
         try:
-            from transformers import HubertModel
-            logger.info("Loading HuBERT from transformers...")
-            _hubert_model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
-            _hubert_model = _hubert_model.to(device).eval()
-        except ImportError:
-            logger.warning("transformers not installed, using simple feature extraction")
-            _hubert_model = None
+            model = _load_hubert_from_fairseq(str(local_path), device)
+            _hubert_model = _HubertAdapter(model)
+            return _hubert_model
+        except Exception as e:
+            logger.warning(f"Failed to load local HuBERT: {e}")
 
-    return _hubert_model
-
-
-def extract_features(audio: np.ndarray, sr: int = 16000) -> np.ndarray:
-    """Extract audio features using HuBERT or simple spectral features."""
-    hubert = load_hubert()
-
-    if hubert is not None:
-        # Use HuBERT
-        device = next(hubert.parameters()).device
-        audio_tensor = torch.FloatTensor(audio).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            outputs = hubert(audio_tensor)
-            features = outputs.last_hidden_state.cpu().numpy()
-    else:
-        # Fallback: use simple mel spectrogram features
-        import librosa
-        mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=128)
-        features = librosa.power_to_db(mel, ref=np.max).T
-        # Add channel dim to match HuBERT output shape
-        features = features[np.newaxis, :, :]
-
-    return features
+    # Fallback: try downloading from HuggingFace
+    try:
+        from transformers import HubertModel
+        logger.info("Downloading HuBERT from HuggingFace...")
+        model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
+        model = model.to(device).eval()
+        _hubert_model = _HubertAdapter(model)
+        logger.info("Loaded HuBERT from HuggingFace")
+        return _hubert_model
+    except Exception as e:
+        logger.error(f"Failed to load HuBERT: {e}")
+        return None
 
 
-def load_voice_model(
-    model_path: str | Path,
-    device: torch.device | None = None,
-) -> dict:
-    """Load an RVC voice model from .pth file."""
+def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
+    """Load RVC model from .pth file."""
     model_path = Path(model_path)
     cache_key = str(model_path.resolve())
 
     if cache_key in _model_cache:
-        logger.info(f"Using cached model: {model_path.name}")
         return _model_cache[cache_key]
 
     if device is None:
         device = get_device()
 
     logger.info(f"Loading RVC model: {model_path}")
-    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
 
-    # Standard RVC model structure
+    cpt = checkpoint
+    tgt_sr = cpt["config"][-1]
+    cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
+    if_f0 = cpt.get("f0", 1)
+    version = cpt.get("version", "v1")
+
+    from infer.lib.infer_pack.models import (
+        SynthesizerTrnMs256NSFsid,
+        SynthesizerTrnMs256NSFsid_nono,
+        SynthesizerTrnMs768NSFsid,
+        SynthesizerTrnMs768NSFsid_nono,
+    )
+
+    is_half = device.type == "cuda"
+    synth_classes = {
+        ("v1", 1): SynthesizerTrnMs256NSFsid,
+        ("v1", 0): SynthesizerTrnMs256NSFsid_nono,
+        ("v2", 1): SynthesizerTrnMs768NSFsid,
+        ("v2", 0): SynthesizerTrnMs768NSFsid_nono,
+    }
+    SynthClass = synth_classes.get((version, if_f0), SynthesizerTrnMs256NSFsid)
+
+    net_g = SynthClass(*cpt["config"], is_half=is_half)
+    del net_g.enc_q
+    net_g.load_state_dict(cpt["weight"], strict=False)
+    net_g.eval().to(device)
+    if is_half:
+        net_g = net_g.half()
+    else:
+        net_g = net_g.float()
+
     model_data = {
-        "config": checkpoint.get("config", checkpoint.get("info", {})),
-        "weight": checkpoint.get("model", checkpoint.get("weight", {})),
+        "net_g": net_g,
+        "tgt_sr": tgt_sr,
+        "if_f0": if_f0,
+        "version": version,
         "device": device,
+        "cpt": cpt,
     }
 
     _model_cache[cache_key] = model_data
+    logger.info(f"RVC model loaded: version={version}, sr={tgt_sr}, f0={bool(if_f0)}")
     return model_data
 
 
-def load_index(index_path: str | Path | None) -> "faiss.Index | None":
-    """Load FAISS index for voice retrieval."""
-    if index_path is None or not Path(index_path).exists():
-        return None
+def get_pipeline() -> "Pipeline":
+    """Get or create RVC Pipeline instance."""
+    global _pipeline
+    if _pipeline is not None:
+        return _pipeline
 
+    from infer.modules.vc.pipeline import Pipeline
+
+    class Config:
+        def __init__(self):
+            self.device = get_device()
+            self.is_half = self.device.type == "cuda"
+            self.x_pad = 3
+            self.x_query = 10
+            self.x_center = 60
+            self.x_max = 65
+
+    _pipeline = Pipeline(40000, Config())  # Default SR, will be overridden
+    return _pipeline
+
+
+def extract_f0(audio: np.ndarray, sr: int, pitch_shift: int = 0, method: str = "pm") -> np.ndarray:
+    """Extract F0 (pitch) from audio using parselmouth."""
     try:
-        import faiss
-        index = faiss.read_index(str(index_path))
-        logger.info(f"Loaded FAISS index: {index_path} ({index.ntotal} vectors)")
-        return index
+        import parselmouth
+        snd = parselmouth.Sound(audio, sr)
+        pitch = snd.to_pitch(
+            time_step=snd.duration / (len(audio) / 160),  # ~10ms frames
+            pitch_floor=75.0,
+            pitch_ceiling=600.0,
+        )
+        f0 = pitch.selected_array["frequency"]
+        if pitch_shift != 0:
+            voiced = f0 > 0
+            f0[voiced] *= 2 ** (pitch_shift / 12)
+        return f0
     except Exception as e:
-        logger.warning(f"Failed to load FAISS index: {e}")
-        return None
+        logger.warning(f"parselmouth F0 extraction failed: {e}")
+
+    # Simple fallback
+    frame_len = int(sr * 0.01)
+    f0 = []
+    for i in range(0, len(audio) - frame_len, frame_len):
+        frame = audio[i:i + frame_len]
+        zcr = np.sum(np.abs(np.diff(np.sign(frame)))) / (2 * frame_len)
+        freq = zcr * sr / 2
+        f0.append(freq if 50 < freq < 1000 else 0)
+    f0 = np.array(f0)
+    if pitch_shift != 0:
+        voiced = f0 > 0
+        f0[voiced] *= 2 ** (pitch_shift / 12)
+    return f0
 
 
 def rvc_convert(
@@ -128,8 +307,7 @@ def rvc_convert(
     rms_mix_rate: float = 0.25,
     protect: float = 0.33,
 ) -> str:
-    """
-    Convert voice using RVC.
+    """Convert voice using RVC Pipeline.
 
     Args:
         input_path: path to input audio (WAV)
@@ -154,243 +332,107 @@ def rvc_convert(
     if not voice_dir.exists():
         raise FileNotFoundError(f"Voice model not found: {voice_id}")
 
-    # Find .pth and .index files
     pth_files = list(voice_dir.glob("*.pth"))
     if not pth_files:
         raise FileNotFoundError(f"No .pth model found in {voice_dir}")
 
     model_path = pth_files[0]
     index_files = list(voice_dir.glob("*.index"))
-    index_path = index_files[0] if index_files else None
+    index_path = str(index_files[0]) if index_files else ""
 
     # Load model
-    model_data = load_voice_model(model_path, device)
-    index = load_index(index_path)
+    model_data = load_rvc_model(str(model_path), device)
+    net_g = model_data["net_g"]
+    tgt_sr = model_data["tgt_sr"]
+    if_f0 = model_data["if_f0"]
+    version = model_data["version"]
+
+    # Load HuBERT
+    hubert = load_hubert()
+    if hubert is None:
+        logger.warning("HuBERT not available, using fallback")
+        return _fallback_convert(input_path, output_path, pitch_shift, tgt_sr)
+
+    # Get pipeline
+    pipe = get_pipeline()
 
     # Load input audio
     audio, sr = sf.read(input_path)
     if audio.ndim > 1:
-        audio = audio.mean(axis=1)  # Convert to mono
+        audio = audio.mean(axis=1)
 
-    # Resample to 16kHz for feature extraction
+    # Resample to 16kHz
     if sr != 16000:
         import torchaudio
-        audio_tensor = torch.FloatTensor(audio).unsqueeze(0)
-        audio_16k = torchaudio.transforms.Resample(sr, 16000)(audio_tensor).squeeze(0).numpy()
-    else:
-        audio_16k = audio
-
-    # Extract F0 (pitch)
-    f0 = extract_f0(audio_16k, 16000, pitch_shift, f0_method)
-
-    # Extract features
-    features = extract_features(audio_16k, 16000)
-
-    # Apply FAISS index retrieval if available
-    if index is not None and index_rate > 0:
-        features = apply_index_retrieval(features, index, index_rate)
-
-    # Run model inference
-    output_audio = run_inference(
-        model_data, features, f0, device,
-        protect=protect,
-    )
-
-    # RMS matching
-    if rms_mix_rate > 0:
-        output_audio = rms_match(audio, output_audio, sr, rms_mix_rate)
-
-    # Save output
-    sf.write(output_path, output_audio, sr)
-    logger.info(f"RVC output saved: {output_path}")
-
-    return output_path
-
-
-def extract_f0(
-    audio: np.ndarray,
-    sr: int,
-    pitch_shift: int = 0,
-    method: str = "pm",
-) -> np.ndarray:
-    """Extract F0 (fundamental frequency / pitch) from audio."""
-    if method == "pm":
-        # Parselmouth (PM) method - fast and decent quality
-        try:
-            import parselmouth
-            snd = parselmouth.Sound(audio, sr)
-            pitch = snd.to_pitch(
-                time_step=0.01,
-                voicing_threshold=0.6,
-            )
-            f0 = pitch.selected_array["frequency"]
-
-            # Apply pitch shift
-            if pitch_shift != 0:
-                f0 *= 2 ** (pitch_shift / 12)
-
-            return f0
-        except ImportError:
-            logger.warning("parselmouth not installed, falling back to simple method")
-
-    # Fallback: simple autocorrelation-based pitch detection
-    return simple_f0_detection(audio, sr, pitch_shift)
-
-
-def simple_f0_detection(audio: np.ndarray, sr: int, pitch_shift: int = 0) -> np.ndarray:
-    """Simple autocorrelation-based F0 detection."""
-    frame_len = int(sr * 0.01)  # 10ms frames
-    hop = frame_len
-    f0 = []
-
-    for i in range(0, len(audio) - frame_len, hop):
-        frame = audio[i:i + frame_len]
-        # Zero-crossing rate as rough pitch estimate
-        zcr = np.sum(np.abs(np.diff(np.sign(frame)))) / (2 * frame_len)
-        freq = zcr * sr / 2
-        if freq < 50 or freq > 1000:
-            freq = 0  # Unvoiced
-        f0.append(freq)
-
-    f0 = np.array(f0)
-    if pitch_shift != 0:
-        voiced = f0 > 0
-        f0[voiced] *= 2 ** (pitch_shift / 12)
-
-    return f0
-
-
-def apply_index_retrieval(
-    features: np.ndarray,
-    index: "faiss.Index",
-    index_rate: float,
-) -> np.ndarray:
-    """Apply FAISS index retrieval to improve voice similarity."""
-    import faiss
-
-    # Reshape for FAISS query
-    flat_features = features.reshape(-1, features.shape[-1]).astype("float32")
+        audio_t = torch.FloatTensor(audio).unsqueeze(0)
+        audio = torchaudio.transforms.Resample(sr, 16000)(audio_t).squeeze(0).numpy()
+        sr = 16000
 
     # Normalize
-    faiss.normalize_L2(flat_features)
+    audio_max = np.abs(audio).max() / 0.95
+    if audio_max > 1:
+        audio = audio_max
 
-    # Search
-    k = 8
-    _, I = index.search(flat_features, k)
+    # Prepare F0 tensors
+    pitch = None
+    pitchf = None
+    if if_f0:
+        f0 = extract_f0(audio, sr, pitch_shift, f0_method)
+        pitch = torch.LongTensor(f0).to(device).unsqueeze(0)
+        pitchf = pitch.float()
 
-    # Blend original features with retrieved features
-    # (simplified - real RVC uses more sophisticated blending)
-    return features  # TODO: implement proper blending
-
-
-def run_inference(
-    model_data: dict,
-    features: np.ndarray,
-    f0: np.ndarray,
-    device: torch.device,
-    protect: float = 0.3,
-) -> np.ndarray:
-    """Run the RVC model inference.
-
-    Loads the actual RVC SynthesizerTrn model and runs voice conversion.
-    If model architecture can't be loaded, falls back to pitch-shifted audio.
-    """
-    weights = model_data.get("weight", {})
-    config = model_data.get("config", {})
-
-    if not weights:
-        logger.warning("No model weights found, returning pitch-shifted audio")
-        return _fallback_inference(features, f0, device)
-
+    # Use pipeline for inference
     try:
-        # Try to import RVC model architecture
-        from infer_pack.models import SynthesizerTrnMs256NSFsid, SynthesizerTrnMs256NSFsidNono
-        from infer_pack.models import SynthesizerTrnMs768NSFsid, SynthesizerTrnMs768NSFsidNono
+        times = [0, 0, 0]
+        sid = 0
 
-        # Determine model type from config
-        model_config = config if isinstance(config, (list, dict)) else {}
-        if isinstance(model_config, list) and len(model_config) > 0:
-            model_config = model_config[0] if isinstance(model_config[0], dict) else {}
+        audio_opt = pipe.pipeline(
+            hubert,
+            net_g,
+            sid,
+            audio,
+            input_path,
+            times,
+            pitch_shift,
+            f0_method,
+            index_path,
+            index_rate,
+            if_f0,
+            filter_radius,
+            tgt_sr,
+            0,  # resample_sr (0 = no resample)
+            rms_mix_rate,
+            version,
+            protect,
+        )
 
-        # Try to instantiate model
-        # RVC v2 uses different model classes based on config
-        net_g = None
-        for ModelClass in [SynthesizerTrnMs256NSFsid, SynthesizerTrnMs768NSFsid,
-                           SynthesizerTrnMs256NSFsidNono, SynthesizerTrnMs768NSFsidNono]:
-            try:
-                net_g = ModelClass(model_config)
-                net_g.load_state_dict(weights, strict=False)
-                net_g = net_g.to(device).eval()
-                net_g.remove_weight_norm()
-                logger.info(f"Loaded model with {ModelClass.__name__}")
-                break
-            except Exception:
-                continue
+        # Convert to float
+        audio_opt = audio_opt.astype(np.float32) / 32768.0
 
-        if net_g is None:
-            logger.warning("Could not instantiate RVC model, using fallback")
-            return _fallback_inference(features, f0, device)
+        # Save
+        sf.write(output_path, audio_opt, tgt_sr)
+        logger.info(f"RVC output saved: {output_path} (len={len(audio_opt)/tgt_sr:.1f}s)")
+        return output_path
 
-        # Run inference
-        with torch.no_grad():
-            features_tensor = torch.FloatTensor(features).to(device)
-            f0_tensor = torch.FloatTensor(f0).to(device)
-
-            # Model expects specific input format
-            audio_tensor = net_g.infer(features_tensor, f0_tensor)[0][0, 0]
-            output_audio = audio_tensor.cpu().numpy()
-
-        logger.info(f"RVC inference complete, output length: {len(output_audio)}")
-        return output_audio
-
-    except ImportError:
-        logger.warning("RVC model architecture not available (infer_pack not installed)")
-        logger.info("Using fallback: pitch-shifted vocals")
-        return _fallback_inference(features, f0, device)
     except Exception as e:
-        logger.error(f"RVC inference failed: {e}, using fallback")
-        return _fallback_inference(features, f0, device)
+        logger.error(f"RVC pipeline failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return _fallback_convert(input_path, output_path, pitch_shift, tgt_sr)
 
 
-def _fallback_inference(
-    features: np.ndarray,
-    f0: np.ndarray,
-    device: torch.device,
-) -> np.ndarray:
-    """Fallback inference: use FFmpeg pitch shift on the original audio.
-
-    This is called when RVC model can't be loaded. Returns None to signal
-    that the caller should use ffmpeg-based pitch shifting instead.
-    """
-    # Return a signal value - the pipeline will use the original vocals
-    # with optional ffmpeg pitch shift
-    logger.info("Fallback: will use original vocals (no voice conversion)")
-    return None
-
-
-def rms_match(
-    original: np.ndarray,
-    converted: np.ndarray,
-    sr: int,
-    mix_rate: float,
-) -> np.ndarray:
-    """Match RMS energy of converted audio to original."""
-    frame_len = int(sr * 0.05)  # 50ms frames
-
-    # Ensure same length
-    min_len = min(len(original), len(converted))
-    original = original[:min_len]
-    converted = converted[:min_len]
-
-    result = converted.copy()
-
-    for i in range(0, min_len - frame_len, frame_len):
-        orig_rms = np.sqrt(np.mean(original[i:i + frame_len] ** 2) + 1e-8)
-        conv_rms = np.sqrt(np.mean(converted[i:i + frame_len] ** 2) + 1e-8)
-
-        if conv_rms > 0:
-            gain = orig_rms / conv_rms
-            gain = 1.0 + (gain - 1.0) * mix_rate
-            result[i:i + frame_len] *= gain
-
-    return result
+def _fallback_convert(input_path: str, output_path: str, pitch_shift: int, tgt_sr: int) -> str:
+    """Fallback: use FFmpeg pitch shift when RVC model can't load."""
+    import subprocess
+    if pitch_shift == 0:
+        import shutil
+        shutil.copy2(input_path, output_path)
+    else:
+        factor = 2 ** (pitch_shift / 12)
+        cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-af", f"asetrate={tgt_sr * factor},aresample={tgt_sr}",
+            output_path,
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
+    return output_path

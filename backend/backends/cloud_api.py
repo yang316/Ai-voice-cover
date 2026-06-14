@@ -1,4 +1,5 @@
 """Cloud API backend for voice conversion."""
+from typing import Callable, Optional
 import asyncio
 import logging
 import tempfile
@@ -25,7 +26,7 @@ class ElevenLabsBackend(ComputeBackend):
         voice_id: str,
         output_path: Path,
         pitch_shift: int = 0,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
     ) -> Path:
         """Convert voice using ElevenLabs voice changer API."""
         if on_progress:
@@ -88,7 +89,7 @@ class FishAudioBackend(ComputeBackend):
         voice_id: str,
         output_path: Path,
         pitch_shift: int = 0,
-        on_progress: callable | None = None,
+        on_progress: Optional[Callable] = None,
     ) -> Path:
         """Convert voice using Fish Audio TTS/VC API."""
         if on_progress:
