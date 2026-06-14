@@ -127,6 +127,8 @@ cmd_start() {
 
     info "Starting GPT-SoVITS API on port $GPT_PORT..."
 
+    export PYTHONPATH="$GPT_DIR:$GPT_DIR/GPT_SoVITS:${PYTHONPATH:-}"
+
     if [ -n "$CONFIG_FILE" ]; then
         nohup python api_v2.py -a 127.0.0.1 -p "$GPT_PORT" -c "$CONFIG_FILE" \
             > "$GPT_LOG" 2>&1 &
