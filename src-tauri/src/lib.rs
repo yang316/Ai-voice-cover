@@ -3,7 +3,6 @@
 
 use std::process::{Command, Child};
 use std::sync::Mutex;
-use std::net::TcpListener;
 use tauri::Manager;
 
 struct AppState {
@@ -33,7 +32,7 @@ async fn check_backend(state: tauri::State<'_, AppState>) -> Result<String, Stri
     let url = format!("http://127.0.0.1:{}/api/v1/health", port);
 
     match reqwest::get(&url).await {
-        Ok(resp) => resp.text().map_err(|e| e.to_string()),
+        Ok(resp) => resp.text().await.map_err(|e| e.to_string()),
         Err(e) => Err(format!("Backend not ready: {}", e)),
     }
 }
@@ -80,8 +79,8 @@ pub fn run() {
                 std::thread::spawn(move || {
                     for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));
-                        if let Ok(listener) = TcpListener::connect(("127.0.0.1", port)) {
-                            drop(listener);
+                        if let Ok(_stream) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+                            drop(_stream);
                             break;
                         }
                     }
