@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: .
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./output:/app/output
+      - ./voices:/app/voices
+    environment:
+      - AVC_REDIS_URL=redis://redis:6379/0
+      - AVC_CELERY_BROKER=redis://redis:6379/0
+      - AVC_CELERY_BACKEND=redis://redis:6379/1
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    command: celery -A backend.workers.celery_app worker --loglevel=info --concurrency=1
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./output:/app/output
+      - ./voices:/app/voices
+    environment:
+      - AVC_REDIS_URL=redis://redis:6379/0
+      - AVC_CELERY_BROKER=redis://redis:6379/0
+      - AVC_CELERY_BACKEND=redis://redis:6379/1
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  redis_data:

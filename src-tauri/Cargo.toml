@@ -1,0 +1,21 @@
+[package]
+name = "ai-voice-cover"
+version = "0.1.0"
+description = "AI Voice Cover - 人声分离 + 声音转换 + 混合输出"
+authors = ["cola"]
+edition = "2021"
+
+[lib]
+name = "ai_voice_cover_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }

@@ -1,0 +1,33 @@
+__pycache__/
+*.pyc
+.env
+uploads/
+output/
+voices/*/
+*.wav
+*.mp3
+.venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+.celerybeat-schedule
+data/
+*.db
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/sidecar/
+*.AppImage
+*.dmg
+*.msi
+*.exe
+*.deb
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
