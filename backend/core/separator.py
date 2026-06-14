@@ -29,46 +29,73 @@ class VocalSeparator:
             logger.info("Using cached separated files")
             return vocals_path, accomp_path
 
-        import sys
-        from pathlib import Path as _P
-
-        # Use wrapper script that patches torchaudio.save to use soundfile
-        wrapper = str(_P(__file__).parent.parent.parent / "scripts" / "demucs_wrapper.py")
-
-        cmd = [
-            sys.executable, wrapper,
-            "--two-stems", "vocals",
-            "-n", self.model_name,
-            "-o", str(output_dir),
-            str(input_path),
-        ]
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        await asyncio.to_thread(
+            self._separate_sync, input_path, output_dir, vocals_path, accomp_path
         )
-        stdout, stderr = await proc.communicate()
-
-        if proc.returncode != 0:
-            raise RuntimeError(f"Demucs failed: {stderr.decode()}")
-
-        # Demucs output: output_dir / model_name / stem / vocals.wav
-        stem = input_path.stem
-        demucs_out = output_dir / self.model_name / stem
-
-        import shutil
-        voc = demucs_out / "vocals.wav"
-        no_voc = demucs_out / "no_vocals.wav"
-
-        if voc.exists():
-            shutil.move(str(voc), str(vocals_path))
-        else:
-            raise FileNotFoundError(f"Demucs vocals output not found at {voc}")
-
-        if no_voc.exists():
-            shutil.move(str(no_voc), str(accomp_path))
-
-        shutil.rmtree(output_dir / self.model_name, ignore_errors=True)
 
         return vocals_path, accomp_path
+
+    def _separate_sync(
+        self, input_path: Path, output_dir: Path, vocals_path: Path, accomp_path: Path
+    ):
+        """Run demucs separation synchronously — NO torchaudio, pure soundfile."""
+        import numpy as np
+        import torch
+        import soundfile as sf
+
+        # Load audio with soundfile (avoids torchaudio torchcodec requirement)
+        logger.info(f"Loading audio: {input_path}")
+        audio_np, sr = sf.read(str(input_path), dtype="float32")
+        # audio_np shape: (samples, channels)
+        if audio_np.ndim == 1:
+            audio_np = audio_np[:, np.newaxis]
+        # Convert to (channels, samples) torch tensor
+        wav = torch.from_numpy(audio_np.T).float()
+
+        # Import demucs (these don't trigger torchaudio load/save at import time)
+        from demucs.pretrained import get_model
+        from demucs.apply import apply_model
+
+        # Load model
+        logger.info(f"Loading Demucs model: {self.model_name}")
+        model = get_model(self.model_name)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device)
+        model.eval()
+
+        # Resample if needed
+        if sr != model.samplerate:
+            import torchaudio
+            wav = torchaudio.functional.resample(wav, sr, model.samplerate)
+
+        # Normalize
+        ref = wav.mean(0)
+        wav = (wav - ref.mean()) / ref.std()
+        mix = wav.unsqueeze(0).to(device)
+
+        # Apply model
+        logger.info("Running Demucs separation (CPU, may take a while)...")
+        with torch.no_grad():
+            sources = apply_model(model, mix, device=device, progress=True)
+
+        # Un-normalize
+        sources = sources * ref.std() + ref.mean()
+
+        # sources shape: (1, num_sources, channels, samples)
+        sources = sources[0]
+
+        source_names = model.sources
+        logger.info(f"Sources: {source_names}")
+
+        # Extract vocals and no_vocals
+        vocals_idx = source_names.index("vocals")
+        vocals = sources[vocals_idx].cpu().numpy()  # (channels, samples)
+        other_indices = [i for i in range(len(source_names)) if i != vocals_idx]
+        no_vocals = sum(sources[i] for i in other_indices).cpu().numpy()
+
+        # Save with soundfile (channels, samples) -> (samples, channels)
+        sf.write(str(vocals_path), vocals.T, model.samplerate)
+        logger.info(f"Saved vocals: {vocals_path}")
+
+        sf.write(str(accomp_path), no_vocals.T, model.samplerate)
+        logger.info(f"Saved accompaniment: {accomp_path}")
