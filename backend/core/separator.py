@@ -30,8 +30,9 @@ class VocalSeparator:
             return vocals_path, accomp_path
 
         # Run Demucs in subprocess to avoid blocking
+        import sys
         cmd = [
-            "python3", "-m", "demucs",
+            sys.executable, "-m", "demucs",
             "--two-stems", "vocals",
             "-n", self.model_name,
             "-o", str(output_dir),
