@@ -96,7 +96,7 @@ jobs:
           pip install fastapi "uvicorn[standard]" "celery[redis]" redis pydantic pydantic-settings \
             python-multipart httpx soundfile numpy pyinstaller
 
-      - name: Build Python sidecar (universal)
+      - name: Build Python sidecar
         run: |
           pyinstaller --onefile \
             --name ai-voice-cover-server \
@@ -114,7 +114,6 @@ jobs:
             --hidden-import uvicorn.lifespan.on \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
-          # Tauri expects sidecar named with target triple
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-aarch64-apple-darwin
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-x86_64-apple-darwin
 
