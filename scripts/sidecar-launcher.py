@@ -5,7 +5,13 @@ This script is bundled with the Tauri app and starts the FastAPI server.
 """
 import os
 import sys
-import signal
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("sidecar")
 
 
 def find_free_port():
@@ -33,9 +39,23 @@ def main():
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     os.chdir(base_dir)
+    logger.info("Base directory: %s", base_dir)
+
+    # Check what's available
+    try:
+        import torch
+        logger.info("PyTorch %s available (device: %s)", torch.__version__, torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    except ImportError:
+        logger.warning("PyTorch not installed — ML features (cover, training) will be unavailable")
+
+    try:
+        import edge_tts
+        logger.info("edge-tts available")
+    except ImportError:
+        logger.warning("edge-tts not installed — TTS will be unavailable")
 
     # Print port so Tauri / logs can see it
-    print(f"Starting AI Voice Cover backend on {host}:{port}", flush=True)
+    logger.info("Starting AI Voice Cover backend on %s:%s", host, port)
 
     # Start uvicorn in-process (works correctly inside PyInstaller bundles)
     import uvicorn
