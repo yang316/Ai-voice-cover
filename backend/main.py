@@ -43,6 +43,8 @@ app.include_router(tts_router, prefix="/api/v1", tags=["tts"])
 app.include_router(train_router, prefix="/api/v1", tags=["training"])
 
 # Serve frontend
-frontend_dir = settings.base_dir / "frontend"
+frontend_dir = settings.base_dir / "frontend-vue" / "dist"
+if not frontend_dir.exists():
+    frontend_dir = settings.base_dir / "frontend"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

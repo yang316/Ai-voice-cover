@@ -40,7 +40,6 @@ jobs:
           cd frontend-vue
           npm ci
           npm run build
-          cp -r dist ../frontend
 
       - name: Install Python deps
         run: |
@@ -52,7 +51,7 @@ jobs:
           pyinstaller --onefile \
             --name ai-voice-cover-server \
             --add-data backend:backend \
-            --add-data frontend:frontend \
+            --add-data "frontend-vue/dist:frontend-vue/dist" \
             --collect-submodules backend \
             --hidden-import fastapi \
             --hidden-import fastapi.middleware.cors \
@@ -118,7 +117,6 @@ jobs:
           cd frontend-vue
           npm ci
           npm run build
-          cp -r dist ../frontend
 
       - name: Install Python deps
         run: |
@@ -130,7 +128,7 @@ jobs:
           pyinstaller --onefile \
             --name ai-voice-cover-server \
             --add-data backend:backend \
-            --add-data frontend:frontend \
+            --add-data "frontend-vue/dist:frontend-vue/dist" \
             --collect-submodules backend \
             --hidden-import fastapi \
             --hidden-import fastapi.middleware.cors \
@@ -194,7 +192,6 @@ jobs:
           cd frontend-vue
           npm ci
           npm run build
-          cp -r dist ../frontend
 
       - name: Install Python deps
         run: |
@@ -206,7 +203,7 @@ jobs:
           pyinstaller --onefile \
             --name ai-voice-cover-server \
             --add-data "backend;backend" \
-            --add-data "frontend;frontend" \
+            --add-data "frontend-vue/dist;frontend-vue/dist" \
             --collect-submodules backend \
             --hidden-import fastapi \
             --hidden-import fastapi.middleware.cors \
