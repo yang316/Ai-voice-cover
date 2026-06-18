@@ -49,50 +49,45 @@ pub fn run() {
             port: Mutex::new(port),
         })
         .setup(move |app| {
-            // Determine sidecar binary name per platform
-            let sidecar_name = if cfg!(target_os = "windows") {
-                "ai-voice-cover-server-x86_64-pc-windows-msvc.exe"
-            } else if cfg!(target_os = "macos") {
-                if cfg!(target_arch = "aarch64") {
-                    "ai-voice-cover-server-aarch64-apple-darwin"
-                } else {
-                    "ai-voice-cover-server-x86_64-apple-darwin"
-                }
-            } else {
-                "ai-voice-cover-server-x86_64-unknown-linux-gnu"
-            };
+            let resource_dir = app.path().resource_dir().unwrap();
+            let sidecar_dir = resource_dir.join("sidecar");
+            let launcher = sidecar_dir.join("sidecar-launcher.py");
 
-            let sidecar_path = app
-                .path()
-                .resource_dir()
-                .unwrap()
-                .join("sidecar")
-                .join(sidecar_name);
+            // Find Python — embedded in bundle or system
+            let python = find_python(&sidecar_dir);
 
-            if sidecar_path.exists() {
-                let child = Command::new(&sidecar_path)
-                    .env("AVC_PORT", port.to_string())
-                    .spawn()
-                    .expect("Failed to start backend");
-
-                *app.state::<AppState>().sidecar.lock().unwrap() = Some(child);
-
-                // Wait for backend to be ready (up to 30s)
-                std::thread::spawn(move || {
-                    for _ in 0..30 {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-                            break;
-                        }
-                    }
-                });
-            } else {
-                // Dev mode - assume backend is running externally
-                println!(
-                    "Sidecar not found at {:?}, using external backend",
-                    sidecar_path
-                );
+            if !launcher.exists() {
+                eprintln!("Launcher not found at {:?}", launcher);
+                return Ok(());
             }
+
+            if python.is_none() {
+                eprintln!("Python not found. Please install Python 3.11+");
+                return Ok(());
+            }
+
+            let python = python.unwrap();
+            println!("Python: {:?}", python);
+            println!("Launcher: {:?}", launcher);
+
+            let child = Command::new(&python)
+                .arg(&launcher)
+                .current_dir(&sidecar_dir)
+                .env("AVC_PORT", port.to_string())
+                .spawn()
+                .expect("Failed to start backend");
+
+            *app.state::<AppState>().sidecar.lock().unwrap() = Some(child);
+
+            // Wait for backend to be ready (up to 60s — first run installs deps)
+            std::thread::spawn(move || {
+                for _ in 0..60 {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                        break;
+                    }
+                }
+            });
 
             Ok(())
         })
@@ -103,4 +98,45 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn find_python(sidecar_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    // 1. Embedded Python in bundle (Windows)
+    #[cfg(target_os = "windows")]
+    {
+        let embedded = sidecar_dir.join("python").join("python.exe");
+        if embedded.exists() {
+            return Some(embedded);
+        }
+    }
+
+    // 2. System Python on PATH
+    for name in &["python3", "python"] {
+        if let Ok(output) = Command::new(name).arg("--version").output() {
+            if output.status.success() {
+                if let Ok(ver) = String::from_utf8(output.stdout) {
+                    if ver.contains("3.11") || ver.contains("3.12") || ver.contains("3.13") {
+                        // Get full path
+                        #[cfg(target_os = "windows")]
+                        let cmd = "where";
+                        #[cfg(not(target_os = "windows"))]
+                        let cmd = "which";
+
+                        if let Ok(path_out) = Command::new(cmd).arg(name).output() {
+                            if let Ok(path_str) = String::from_utf8(path_out.stdout) {
+                                let path = path_str.trim().lines().next().unwrap_or("");
+                                if !path.is_empty() {
+                                    return Some(std::path::PathBuf::from(path));
+                                }
+                            }
+                        }
+                        // Fallback: just use the name
+                        return Some(std::path::PathBuf::from(name));
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }

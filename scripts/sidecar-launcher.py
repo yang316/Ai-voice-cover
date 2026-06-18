@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Sidecar launcher for AI Voice Cover backend.
 
-This script is bundled with the Tauri app and starts the FastAPI server.
+Bundled with the Tauri app. Finds/installs dependencies and starts FastAPI.
+Works with both embedded Python (bundled) and system Python.
 """
 import os
 import sys
+import subprocess
 import logging
 import traceback
+import importlib.util
 
-# Setup logging — both console (for Tauri to capture) and file (for debugging)
-log_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "logs")
+# ── Logging ──────────────────────────────────────────────────────────────────
+base_dir = os.path.dirname(os.path.abspath(__file__))
+log_dir = os.path.join(base_dir, "logs")
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, "sidecar.log")
 
@@ -25,7 +29,64 @@ logger = logging.getLogger("sidecar")
 logger.info("Log file: %s", log_file)
 
 
-def find_free_port():
+# ── Helpers ──────────────────────────────────────────────────────────────────
+def is_embedded_python() -> bool:
+    """Check if running from Python embeddable package (Windows)."""
+    return hasattr(sys, "_base_executable") and "python" in os.path.basename(
+        sys._base_executable
+    ).lower() and os.path.exists(os.path.join(os.path.dirname(sys.executable), "python311._pth"))
+
+
+def setup_pip(python: str) -> bool:
+    """Bootstrap pip for embedded Python. Returns True if pip is available."""
+    try:
+        subprocess.check_call(
+            [python, "-m", "pip", "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    logger.info("pip not found, bootstrapping with ensurepip...")
+    try:
+        subprocess.check_call([python, "-m", "ensurepip", "--upgrade"])
+        logger.info("pip bootstrapped successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to bootstrap pip: %s", e)
+        return False
+
+
+def install_deps(python: str) -> bool:
+    """Install core dependencies from requirements.txt."""
+    req_file = os.path.join(base_dir, "requirements.txt")
+    if not os.path.exists(req_file):
+        logger.warning("requirements.txt not found at %s, skipping install", req_file)
+        return True
+
+    logger.info("Installing dependencies from %s ...", req_file)
+    try:
+        subprocess.check_call(
+            [python, "-m", "pip", "install", "--quiet", "--no-warn-script-location", "-r", req_file],
+        )
+        logger.info("Dependencies installed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to install dependencies: %s", e)
+        return False
+
+
+def check_core_deps() -> bool:
+    """Check if core dependencies are importable."""
+    for mod in ("fastapi", "uvicorn"):
+        if importlib.util.find_spec(mod) is None:
+            return False
+    return True
+
+
+def find_free_port() -> int:
     """Find an available port on localhost."""
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -33,6 +94,7 @@ def find_free_port():
         return s.getsockname()[1]
 
 
+# ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     try:
         _main()
@@ -42,46 +104,55 @@ def main():
 
 
 def _main():
-    # Read port from Rust (Tauri passes AVC_PORT env var), or find one
+    # Ensure sidecar dir is on sys.path so `backend` is importable
+    # (embedded Python's ._pth file only includes its own directory)
+    if base_dir not in sys.path:
+        sys.path.insert(0, base_dir)
+
+    os.chdir(base_dir)
+    logger.info("Python: %s (%s)", sys.executable, sys.version)
+    logger.info("Embedded: %s", is_embedded_python())
+    logger.info("Base dir: %s", base_dir)
+    logger.info("sys.path[0]: %s", sys.path[0])
+
+    python = sys.executable
+
+    # Ensure pip is available (needed for embedded Python)
+    if not setup_pip(python):
+        logger.error("Cannot proceed without pip")
+        sys.exit(1)
+
+    # Install core dependencies if missing
+    if not check_core_deps():
+        if not install_deps(python):
+            logger.error("Cannot proceed without core dependencies")
+            sys.exit(1)
+    else:
+        logger.info("Core dependencies already installed")
+
+    # ── Start backend ────────────────────────────────────────────────────────
     port = int(os.environ.get("AVC_PORT", 0)) or find_free_port()
     host = "127.0.0.1"
 
-    # Ensure env vars are set for the backend
     os.environ["AVC_PORT"] = str(port)
     os.environ["AVC_HOST"] = host
 
-    # Get the base directory (where backend/ and frontend/ live)
-    if getattr(sys, "frozen", False):
-        # PyInstaller bundle — data files are next to the executable
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    os.chdir(base_dir)
-    logger.info("Executable: %s", sys.executable)
-    logger.info("Base directory: %s", base_dir)
-    logger.info("Frozen: %s", getattr(sys, "frozen", False))
-    if getattr(sys, "frozen", False):
-        logger.info("MEIPASS: %s", getattr(sys, "_MEIPASS", "N/A"))
-    logger.info("sys.path: %s", sys.path[:5])
-
-    # Check what's available
+    # Optional: check ML deps
     try:
         import torch
-        logger.info("PyTorch %s available (device: %s)", torch.__version__, torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        logger.info("PyTorch %s (device: %s)", torch.__version__,
+                     torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     except ImportError:
-        logger.warning("PyTorch not installed — ML features (cover, training) will be unavailable")
+        logger.warning("PyTorch not installed — ML features unavailable")
 
     try:
         import edge_tts
         logger.info("edge-tts available")
     except ImportError:
-        logger.warning("edge-tts not installed — TTS will be unavailable")
+        logger.warning("edge-tts not installed — TTS unavailable")
 
-    # Print port so Tauri / logs can see it
-    logger.info("Starting AI Voice Cover backend on %s:%s", host, port)
+    logger.info("Starting backend on %s:%s", host, port)
 
-    # Start uvicorn in-process (works correctly inside PyInstaller bundles)
     import uvicorn
     uvicorn.run(
         "backend.main:app",
