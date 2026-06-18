@@ -56,6 +56,8 @@ const translations = {
     checkingBackend: '检查后端状态…',
     backendOnline: '在线',
     backendOffline: '离线',
+    installMlDeps: '安装 ML 依赖',
+    installingMl: '正在安装中，请稍候...',
 
     // Voice models
     voiceModels: '声音模型',
@@ -167,6 +169,8 @@ const translations = {
     checkingBackend: 'Checking backend…',
     backendOnline: 'Online',
     backendOffline: 'Offline',
+    installMlDeps: 'Install ML deps',
+    installingMl: 'Installing, please wait...',
 
     // Voice models
     voiceModels: 'Voice Models',

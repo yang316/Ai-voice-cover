@@ -63,6 +63,7 @@ _routers = [
     ("backend.api.model_routes", "router", "models", "/api/v1", "models"),
     ("backend.api.tts_routes", "router", "tts", "/api/v1", "tts"),
     ("backend.api.train_routes", "router", "training", "/api/v1", "training"),
+    ("backend.api.ml_routes", "router", "ml", "/api/v1", "ml"),
 ]
 
 for module_path, attr, name, prefix, tag in _routers:

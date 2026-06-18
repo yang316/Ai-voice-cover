@@ -19,6 +19,14 @@
               • {{ appStore.health.gpu.device }}
             </template>
           </span>
+          <button
+            v-if="showInstallMl"
+            class="ml-install-btn"
+            :disabled="mlInstalling"
+            @click="installMlDeps"
+          >
+            {{ mlInstalling ? mlProgress : t('installMlDeps') }}
+          </button>
         </div>
 
         <!-- Tab Navigation -->
@@ -118,6 +126,45 @@ async function checkBackendHealth() {
       status: 'offline',
       gpu: { available: false, device: 'Offline' }
     }
+  }
+}
+
+// ML dependency installation
+const mlInstalling = ref(false)
+const mlProgress = ref('')
+const showInstallMl = computed(() => {
+  if (appStore.health.status !== 'online') return false
+  const features = appStore.health.features
+  if (!features) return false
+  return features.missing?.some((f: string) => ['covers', 'training'].includes(f))
+})
+
+async function installMlDeps() {
+  mlInstalling.value = true
+  mlProgress.value = t('installingMl')
+  try {
+    await fetch(`${apiBase}/ml/install`, { method: 'POST' })
+    // Poll status
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`${apiBase}/ml/status`)
+        const data = await res.json()
+        mlProgress.value = data.progress || t('installingMl')
+        if (!data.installing) {
+          clearInterval(poll)
+          mlInstalling.value = false
+          if (data.error) {
+            mlProgress.value = `Error: ${data.error}`
+          } else {
+            mlProgress.value = ''
+            await checkBackendHealth()
+          }
+        }
+      } catch { /* ignore */ }
+    }, 3000)
+  } catch (e) {
+    mlInstalling.value = false
+    mlProgress.value = 'Failed to start installation'
   }
 }
 
@@ -260,6 +307,30 @@ body {
 .health-text strong {
   color: hsl(var(--foreground));
   font-weight: 500;
+}
+
+.ml-install-btn {
+  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 150ms;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.ml-install-btn:hover {
+  opacity: 0.9;
+}
+
+.ml-install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .tab-nav {

@@ -28,6 +28,10 @@ export interface HealthStatus {
     device: string
     memory?: string
   }
+  features?: {
+    available: string[]
+    missing: string[]
+  }
 }
 
 export interface CreateCoverRequest {
