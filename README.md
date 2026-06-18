@@ -4,6 +4,7 @@ AI 翻唱工具 — 人声分离 + 声音转换 + 混合输出
 
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.3.5-orange)
 
 ## ✨ 功能
 
@@ -164,8 +165,18 @@ voices/
 | GET | `/api/v1/health` | 健康检查 + GPU 信息 |
 | GET | `/api/v1/voices` | 列出已安装音色模型 |
 | POST | `/api/v1/tts` | TTS 语音合成 |
+| GET | `/api/v1/tts/{id}/audio` | 下载 TTS 音频 |
 | POST | `/api/v1/models/download-base` | 一键下载基础模型 |
 | POST | `/api/v1/models/download-voice` | 下载 HuggingFace 音色模型 |
+
+## 🧪 已验证功能
+
+- ✅ **TTS 语音合成** — Edge TTS 多语言支持（中/英/日）
+- ✅ **AI 翻唱** — 人声分离 + RVC 声音转换 + 混音输出
+- ✅ **模型训练** — 上传音频自动训练 RVC 模型（10 epoch 测试通过）
+- ✅ **端到端流程** — TTS 生成 → 训练模型 → 翻唱输出完整验证
+- ✅ **桌面应用** — Tauri v2 打包（Linux/macOS/Windows）
+- ✅ **CI/CD** — GitHub Actions 自动构建（推送 tag 触发）
 
 ## 📁 项目结构
 
@@ -222,7 +233,7 @@ ai-voice-cover/
 npm run tauri:build
 
 # GitHub Actions 自动构建 (推送 tag 触发)
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.5 && git push origin v0.3.5
 ```
 
 构建产物：

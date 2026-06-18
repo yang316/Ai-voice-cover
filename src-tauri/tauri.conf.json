@@ -36,13 +36,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "sidecar/*",
-      "sidecar/backend/*",
-      "sidecar/backend/api/*",
-      "sidecar/backend/core/*",
-      "sidecar/frontend-vue/dist/*",
-      "sidecar/frontend-vue/dist/assets/*",
-      "sidecar/python/*"
+      "sidecar/**/*"
     ],
     "linux": {
       "deb": {

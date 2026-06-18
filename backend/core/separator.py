@@ -49,6 +49,9 @@ class VocalSeparator:
         # audio_np shape: (samples, channels)
         if audio_np.ndim == 1:
             audio_np = audio_np[:, np.newaxis]
+        # Demucs expects stereo (2 channels) — duplicate mono if needed
+        if audio_np.shape[1] == 1:
+            audio_np = np.tile(audio_np, (1, 2))
         # Convert to (channels, samples) torch tensor
         wav = torch.from_numpy(audio_np.T).float()
 

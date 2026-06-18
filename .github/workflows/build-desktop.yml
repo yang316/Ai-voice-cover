@@ -31,6 +31,7 @@ jobs:
             echo "VERSION=$VERSION" >> $GITHUB_ENV
             sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
             sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -113,6 +114,7 @@ jobs:
             echo "VERSION=$VERSION" >> $GITHUB_ENV
             sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
             sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            sed -i '' "1,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -181,6 +183,7 @@ jobs:
             echo "VERSION=$VERSION" >> $GITHUB_ENV
             sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
             sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -205,6 +208,11 @@ jobs:
 
           # Enable pip (uncomment import site)
           sed -i 's/#import site/import site/' "$PYTHON_DIR/python311._pth"
+          # Ensure Lib\site-packages is always on sys.path. ._pth entries are
+          # added regardless of whether the dir exists yet, so packages pip
+          # installs on first run are importable from startup.
+          grep -qxF 'Lib\site-packages' "$PYTHON_DIR/python311._pth" || \
+            printf 'Lib\\site-packages\n' >> "$PYTHON_DIR/python311._pth"
 
           echo "Embedded Python $PYTHON_VERSION ready"
           ls "$PYTHON_DIR/python.exe"

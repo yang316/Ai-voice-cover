@@ -110,6 +110,43 @@ def install_deps(python: str) -> bool:
         return False
 
 
+def refresh_site_packages() -> None:
+    """Add the interpreter's site-packages to sys.path at runtime.
+
+    The Windows embeddable Python builds sys.path once at startup from its
+    ``python311._pth`` file. Even with ``import site`` enabled there, site.py
+    only adds ``Lib/site-packages`` if that directory already EXISTS at startup.
+    On a first run it doesn't — pip creates it moments later — so the running
+    process never sees freshly installed packages (uvicorn/fastapi) and imports
+    fail despite a successful install. We fix that by registering the directory
+    explicitly and invalidating import caches, so the current process can import
+    what pip just wrote without needing a restart.
+    """
+    candidates = []
+    py_dir = os.path.dirname(os.path.abspath(sys.executable))
+    # Embeddable layout: <py_dir>/Lib/site-packages
+    candidates.append(os.path.join(py_dir, "Lib", "site-packages"))
+    # Some get-pip/ensurepip layouts use a lowercase 'lib'
+    candidates.append(os.path.join(py_dir, "lib", "site-packages"))
+
+    added = False
+    for sp in candidates:
+        if os.path.isdir(sp):
+            try:
+                import site
+                site.addsitedir(sp)
+            except Exception:
+                pass
+            if sp not in sys.path:
+                sys.path.insert(0, sp)
+            added = True
+            logger.info("Registered site-packages: %s", sp)
+    if added:
+        importlib.invalidate_caches()
+    else:
+        logger.warning("No site-packages directory found under %s", py_dir)
+
+
 def check_core_deps() -> bool:
     """Check if core dependencies are importable."""
     for mod in ("fastapi", "uvicorn"):
@@ -154,10 +191,23 @@ def _main():
         logger.error("Cannot proceed without pip")
         sys.exit(1)
 
+    # Make any already-installed packages visible to THIS process before we
+    # decide whether an install is needed (embedded Python won't see them
+    # otherwise — see refresh_site_packages docstring).
+    refresh_site_packages()
+
     # Install core dependencies if missing
     if not check_core_deps():
         if not install_deps(python):
             logger.error("Cannot proceed without core dependencies")
+            sys.exit(1)
+        # pip just created/populated site-packages; register it so the freshly
+        # installed modules are importable without restarting the process.
+        refresh_site_packages()
+        if not check_core_deps():
+            logger.error(
+                "Core dependencies still not importable after install. "
+                "sys.path=%s", sys.path)
             sys.exit(1)
     else:
         logger.info("Core dependencies already installed")

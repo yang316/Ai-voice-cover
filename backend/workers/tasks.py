@@ -22,13 +22,13 @@ def process_cover(
 ):
     """Process a voice cover task."""
     from backend.api.routes import update_task
-    from backend.api.schemas import TaskStatus
+    from backend.api.schemas import TaskStatus, TaskStep
     from backend.backends.factory import ComputeBackendType, create_backend
     from backend.config import settings
     from backend.core.pipeline import VoiceCoverPipeline
 
     try:
-        update_task(task_id, status=TaskStatus.SEPARATING, progress=5)
+        update_task(task_id, status=TaskStatus.PROCESSING, step=TaskStep.SEPARATING, progress=5)
 
         # Create backend
         bt = ComputeBackendType(backend_type)
@@ -40,14 +40,14 @@ def process_cover(
         # Progress callback
         def on_progress(step: str, pct: int):
             if "separat" in step.lower():
-                status = TaskStatus.SEPARATING
+                task_step = TaskStep.SEPARATING
             elif "convert" in step.lower():
-                status = TaskStatus.CONVERTING
+                task_step = TaskStep.CONVERTING
             elif "mix" in step.lower():
-                status = TaskStatus.MIXING
+                task_step = TaskStep.MIXING
             else:
-                status = TaskStatus.COMPLETED
-            update_task(task_id, status=status, progress=pct, message=step)
+                task_step = TaskStep.COMPLETE
+            update_task(task_id, status=TaskStatus.PROCESSING, step=task_step, progress=pct, message=step)
 
         # Run pipeline
         output_dir = settings.output_dir / task_id

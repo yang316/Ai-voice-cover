@@ -57,6 +57,10 @@ if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
         # Enable pip in embedded Python:
         # Uncomment import site in python311._pth
         sed -i 's/#import site/import site/' "$PYTHON_DIR/python311._pth"
+        # Ensure Lib\site-packages is always on sys.path (._pth entries don't
+        # require the dir to exist yet), so first-run pip installs are importable.
+        grep -qxF 'Lib\site-packages' "$PYTHON_DIR/python311._pth" || \
+            printf 'Lib\\site-packages\n' >> "$PYTHON_DIR/python311._pth"
 
         echo "  Embedded Python $PYTHON_VERSION downloaded"
     else

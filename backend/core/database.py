@@ -24,6 +24,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tasks (
             task_id TEXT PRIMARY KEY,
             status TEXT NOT NULL DEFAULT 'pending',
+            step TEXT DEFAULT 'separating',
             progress INTEGER DEFAULT 0,
             message TEXT DEFAULT '',
             input_file TEXT,
@@ -39,6 +40,14 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
     """)
     conn.commit()
+
+    # Migrate: add 'step' column if missing (existing DBs)
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN step TEXT DEFAULT 'separating'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
     conn.close()
 
 
