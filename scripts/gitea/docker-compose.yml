@@ -1,0 +1,42 @@
+# Gitea + Gitea Actions Runner
+# Deploy on ECS: docker compose up -d
+# Then register runner (see below)
+
+services:
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__server__ROOT_URL=http://8.137.82.33:3000
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__actions__ENABLED=true
+    restart: unless-stopped
+    volumes:
+      - ./gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3000:3000"    # Web UI
+      - "2222:22"      # SSH
+    # Limit memory for 2G ECS
+    mem_limit: 512m
+
+  # Optional: runner in same ECS (may OOM on Tauri builds)
+  # Recommended: run runner on local machine instead
+  #
+  # runner:
+  #   image: gitea/act_runner:latest
+  #   container_name: gitea-runner
+  #   environment:
+  #     - GITEA_INSTANCE_URL=http://gitea:3000
+  #     - GITEA_RUNNER_REGISTRATION_TOKEN=<get-from-gitea-ui>
+  #     - GITEA_RUNNER_NAME=ecs-runner
+  #     - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:20-bookworm
+  #   depends_on:
+  #     - gitea
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   mem_limit: 1g

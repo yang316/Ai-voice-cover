@@ -26,11 +26,15 @@ jobs:
 
       - name: Extract version from tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          echo "Version set to $VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            echo "Version set to $VERSION"
+          else
+            echo "No tag, keeping existing version"
+          fi
 
       - name: Install system deps
         run: |
@@ -104,11 +108,15 @@ jobs:
 
       - name: Extract version from tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-          sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          echo "Version set to $VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            echo "Version set to $VERSION"
+          else
+            echo "No tag, keeping existing version"
+          fi
 
       - name: Build frontend
         run: |
@@ -168,11 +176,15 @@ jobs:
 
       - name: Extract version from tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          echo "Version set to $VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            echo "Version set to $VERSION"
+          else
+            echo "No tag, keeping existing version"
+          fi
 
       - name: Build frontend
         run: |
