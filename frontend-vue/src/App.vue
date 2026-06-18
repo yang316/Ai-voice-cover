@@ -143,12 +143,11 @@ async function installMlDeps() {
   mlInstalling.value = true
   mlProgress.value = t('installingMl')
   try {
-    await fetch(api('/ml/install'), { method: 'POST' })
+    await api.installMlDeps()
     // Poll status
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(api('/ml/status'))
-        const data = await res.json()
+        const data = await api.getMlStatus()
         mlProgress.value = data.progress || t('installingMl')
         if (!data.installing) {
           clearInterval(poll)

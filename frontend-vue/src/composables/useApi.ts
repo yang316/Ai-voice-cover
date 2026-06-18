@@ -107,6 +107,17 @@ export function useApi() {
     return api(`/covers/${id}/download`)
   }
 
+  async function installMlDeps(): Promise<void> {
+    const res = await fetch(api('/ml/install'), { method: 'POST' })
+    if (!res.ok) throw new Error('Failed to start ML install')
+  }
+
+  async function getMlStatus(): Promise<any> {
+    const res = await fetch(api('/ml/status'))
+    if (!res.ok) throw new Error('Failed to get ML status')
+    return await res.json()
+  }
+
   return {
     loading,
     error,
@@ -117,5 +128,7 @@ export function useApi() {
     createCover,
     getTaskStatus,
     getDownloadUrl,
+    installMlDeps,
+    getMlStatus,
   }
 }
