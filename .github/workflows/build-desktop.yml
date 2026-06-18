@@ -62,6 +62,10 @@ jobs:
           mkdir -p "$SIDECAr_DIR/frontend-vue"
           cp -r frontend-vue/dist "$SIDECAr_DIR/frontend-vue/dist"
 
+          # Placeholder for python dir (only Windows has embedded Python)
+          mkdir -p "$SIDECAr_DIR/python"
+          echo "System Python" > "$SIDECAr_DIR/python/.placeholder"
+
           echo "Sidecar prepared:"
           find "$SIDECAr_DIR" -maxdepth 2 -type f | head -20
 
@@ -124,6 +128,10 @@ jobs:
           cp -r backend "$SIDECAr_DIR/backend"
           mkdir -p "$SIDECAr_DIR/frontend-vue"
           cp -r frontend-vue/dist "$SIDECAr_DIR/frontend-vue/dist"
+
+          # Placeholder for python dir (only Windows has embedded Python)
+          mkdir -p "$SIDECAr_DIR/python"
+          echo "System Python" > "$SIDECAr_DIR/python/.placeholder"
 
           echo "Sidecar prepared"
 

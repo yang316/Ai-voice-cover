@@ -1,6 +1,6 @@
 [package]
 name = "ai-voice-cover"
-version = "0.3.2"
+version = "0.3.3"
 description = "AI Voice Cover - 人声分离 + 声音转换 + 混合输出"
 authors = ["cola"]
 edition = "2021"
