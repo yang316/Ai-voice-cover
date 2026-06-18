@@ -1,17 +1,17 @@
 import { ref } from 'vue'
 import type { Voice, Task, HealthStatus, CreateCoverRequest } from '@/types/api'
 
-// API base URL
+// API base URL — Tauri 2 uses window.__TAURI__.core.invoke()
 const getApiBase = async (): Promise<string> => {
-  // 检测 Tauri 环境
-  if (window.__TAURI__) {
+  if (window.__TAURI__?.core?.invoke) {
     try {
-      const url = await window.__TAURI__.invoke('get_backend_url')
+      const url = await window.__TAURI__.core.invoke('get_backend_url')
       return `${url}/api/v1`
     } catch (e) {
       console.warn('Tauri backend URL not available, using default')
     }
   }
+  // Fallback for dev mode (Vite proxy)
   return '/api/v1'
 }
 
@@ -40,7 +40,6 @@ export function useApi() {
     const res = await fetch(api('/voices'))
     if (!res.ok) throw new Error('Failed to load voices')
     const data = await res.json()
-    // 后端返回的字段可能不同，做映射
     return data.map((v: any) => ({
       id: v.id,
       name: v.name,
