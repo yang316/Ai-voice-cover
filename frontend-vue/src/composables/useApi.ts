@@ -5,10 +5,6 @@ import type { Voice, Task, HealthStatus, CreateCoverRequest } from '@/types/api'
 const BACKEND_PORT = 9527
 const BACKEND_BASE = `http://127.0.0.1:${BACKEND_PORT}/api/v1`
 
-const getApiBase = async (): Promise<string> => {
-  return BACKEND_BASE
-}
-
 let apiBase = BACKEND_BASE
 
 const api = (path: string) => `${apiBase}${path}`
