@@ -42,6 +42,27 @@ pub fn run() {
             let sidecar_dir = resource_dir.join("sidecar");
             let launcher = sidecar_dir.join("sidecar-launcher.py");
 
+            println!("Resource dir: {:?}", resource_dir);
+            println!("Sidecar dir: {:?}", sidecar_dir);
+            println!("Launcher exists: {}", launcher.exists());
+
+            // Debug: list sidecar contents
+            if let Ok(entries) = std::fs::read_dir(&sidecar_dir) {
+                for entry in entries.flatten() {
+                    println!("  {:?}", entry.path());
+                }
+            }
+
+            // Debug: check embedded python
+            let py_dir = sidecar_dir.join("python");
+            println!("Python dir: {:?}", py_dir);
+            println!("Python dir exists: {}", py_dir.exists());
+            if let Ok(entries) = std::fs::read_dir(&py_dir) {
+                for entry in entries.flatten() {
+                    println!("  {:?}", entry.path());
+                }
+            }
+
             if !launcher.exists() {
                 eprintln!("Launcher not found at {:?}", launcher);
                 eprintln!("Resource dir: {:?}", resource_dir);
@@ -95,6 +116,7 @@ fn find_python(sidecar_dir: &std::path::Path) -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let embedded = sidecar_dir.join("python").join("python.exe");
+        eprintln!("[find_python] Checking embedded: {:?} exists={}", embedded, embedded.exists());
         if embedded.exists() {
             return Some(embedded);
         }
@@ -104,27 +126,29 @@ fn find_python(sidecar_dir: &std::path::Path) -> Option<std::path::PathBuf> {
     for name in &["python3", "python"] {
         if let Ok(output) = Command::new(name).arg("--version").output() {
             if output.status.success() {
-                if let Ok(ver) = String::from_utf8(output.stdout) {
-                    if ver.contains("3.11") || ver.contains("3.12") || ver.contains("3.13") {
-                        #[cfg(target_os = "windows")]
-                        let cmd = "where";
-                        #[cfg(not(target_os = "windows"))]
-                        let cmd = "which";
+                let ver = String::from_utf8_lossy(&output.stdout).to_string()
+                    + &String::from_utf8_lossy(&output.stderr);
+                eprintln!("[find_python] {} version: {:?}", name, ver.trim());
+                if ver.contains("3.11") || ver.contains("3.12") || ver.contains("3.13") {
+                    #[cfg(target_os = "windows")]
+                    let cmd = "where";
+                    #[cfg(not(target_os = "windows"))]
+                    let cmd = "which";
 
-                        if let Ok(path_out) = Command::new(cmd).arg(name).output() {
-                            if let Ok(path_str) = String::from_utf8(path_out.stdout) {
-                                let path = path_str.trim().lines().next().unwrap_or("");
-                                if !path.is_empty() {
-                                    return Some(std::path::PathBuf::from(path));
-                                }
+                    if let Ok(path_out) = Command::new(cmd).arg(name).output() {
+                        if let Ok(path_str) = String::from_utf8(path_out.stdout) {
+                            let path = path_str.trim().lines().next().unwrap_or("");
+                            if !path.is_empty() {
+                                return Some(std::path::PathBuf::from(path));
                             }
                         }
-                        return Some(std::path::PathBuf::from(name));
                     }
+                    return Some(std::path::PathBuf::from(name));
                 }
             }
         }
     }
 
+    eprintln!("[find_python] No suitable Python found");
     None
 }

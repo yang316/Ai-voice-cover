@@ -93,11 +93,16 @@ def install_deps(python: str) -> bool:
 
     logger.info("Installing dependencies from %s ...", req_file)
     try:
-        subprocess.check_call(
+        result = subprocess.run(
             [python, "-m", "pip", "install", "--quiet", "--no-warn-script-location",
              "--cache-dir", str(_data_dir / "pip-cache"),
              "-r", req_file],
+            capture_output=True, text=True,
         )
+        if result.returncode != 0:
+            logger.error("pip install failed (exit %s):\nstdout: %s\nstderr: %s",
+                        result.returncode, result.stdout[-500:], result.stderr[-500:])
+            return False
         logger.info("Dependencies installed successfully")
         return True
     except subprocess.CalledProcessError as e:
