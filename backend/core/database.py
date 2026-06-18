@@ -6,7 +6,7 @@ from pathlib import Path
 
 from backend.config import settings
 
-DB_PATH = settings.base_dir / "data" / "tasks.db"
+DB_PATH = settings.data_dir / "data" / "tasks.db"
 
 
 def get_db() -> sqlite3.Connection:

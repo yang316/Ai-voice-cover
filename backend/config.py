@@ -1,6 +1,30 @@
 """Application configuration."""
+import os
+import sys
 from pathlib import Path
 from pydantic_settings import BaseSettings
+
+
+def _get_data_dir() -> Path:
+    """Get a writable data directory for the app."""
+    # Check if running from a packaged app (sidecar next to read-only install)
+    sidecar_dir = Path(__file__).parent.parent
+
+    # If sidecar dir is writable, use it (development mode)
+    if os.access(str(sidecar_dir), os.W_OK):
+        return sidecar_dir
+
+    # Otherwise use platform-specific user data directory
+    if sys.platform == "win32":
+        return Path(os.environ.get("APPDATA", Path.home())) / "AI Voice Cover"
+    elif sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "AI Voice Cover"
+    else:
+        return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "ai-voice-cover"
+
+
+_data_dir = _get_data_dir()
+_data_dir.mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
@@ -8,9 +32,10 @@ class Settings(BaseSettings):
     debug: bool = False
 
     base_dir: Path = Path(__file__).parent.parent
-    upload_dir: Path = base_dir / "uploads"
-    output_dir: Path = base_dir / "output"
-    voices_dir: Path = base_dir / "voices"
+    data_dir: Path = _data_dir
+    upload_dir: Path = _data_dir / "uploads"
+    output_dir: Path = _data_dir / "output"
+    voices_dir: Path = _data_dir / "voices"
 
     redis_url: str = "redis://localhost:6379/0"
     celery_broker: str = "redis://localhost:6379/0"
@@ -39,7 +64,7 @@ class Settings(BaseSettings):
     mimo_api_key: str = ""
 
     # Training
-    models_dir: Path = base_dir / "models"
+    models_dir: Path = _data_dir / "models"
 
     # i18n
     default_language: str = "zh"  # "zh" or "en"

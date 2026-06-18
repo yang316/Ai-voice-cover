@@ -10,10 +10,23 @@ import subprocess
 import logging
 import traceback
 import importlib.util
+from pathlib import Path
+
+# ── Writable data directory ──────────────────────────────────────────────────
+# sidecar files may be in a read-only location (e.g. /usr/lib/ on Linux)
+# so we put logs, pip cache, and data in a user-writable directory.
+if sys.platform == "win32":
+    _data_dir = Path(os.environ.get("APPDATA", Path.home())) / "AI Voice Cover"
+elif sys.platform == "darwin":
+    _data_dir = Path.home() / "Library" / "Application Support" / "AI Voice Cover"
+else:
+    _data_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "ai-voice-cover"
+
+_data_dir.mkdir(parents=True, exist_ok=True)
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 base_dir = os.path.dirname(os.path.abspath(__file__))
-log_dir = os.path.join(base_dir, "logs")
+log_dir = str(_data_dir / "logs")
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, "sidecar.log")
 
@@ -27,6 +40,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sidecar")
 logger.info("Log file: %s", log_file)
+logger.info("Data dir: %s", _data_dir)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,7 +83,9 @@ def install_deps(python: str) -> bool:
     logger.info("Installing dependencies from %s ...", req_file)
     try:
         subprocess.check_call(
-            [python, "-m", "pip", "install", "--quiet", "--no-warn-script-location", "-r", req_file],
+            [python, "-m", "pip", "install", "--quiet", "--no-warn-script-location",
+             "--cache-dir", str(_data_dir / "pip-cache"),
+             "-r", req_file],
         )
         logger.info("Dependencies installed successfully")
         return True
