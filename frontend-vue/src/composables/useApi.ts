@@ -3,27 +3,13 @@ import type { Voice, Task, HealthStatus, CreateCoverRequest } from '@/types/api'
 
 // Fixed backend port — matches BACKEND_PORT in lib.rs
 const BACKEND_PORT = 9527
+const BACKEND_BASE = `http://127.0.0.1:${BACKEND_PORT}/api/v1`
 
 const getApiBase = async (): Promise<string> => {
-  // In Tauri, use fixed port
-  if (window.__TAURI__) {
-    try {
-      // Try Tauri 2 invoke first
-      if (window.__TAURI__?.core?.invoke) {
-        const url = await window.__TAURI__.core.invoke('get_backend_url')
-        return `${url}/api/v1`
-      }
-    } catch (e) {
-      // fallback to fixed port
-    }
-    return `http://127.0.0.1:${BACKEND_PORT}/api/v1`
-  }
-  // Dev mode (Vite proxy)
-  return '/api/v1'
+  return BACKEND_BASE
 }
 
-let apiBase = `/api/v1`
-getApiBase().then(base => { apiBase = base })
+let apiBase = BACKEND_BASE
 
 const api = (path: string) => `${apiBase}${path}`
 
