@@ -1,6 +1,6 @@
 {
   "name": "ai-voice-cover",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "AI Voice Cover - 人声分离 + 声音转换 + 混合输出",
   "scripts": {
