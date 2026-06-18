@@ -6,12 +6,23 @@ This script is bundled with the Tauri app and starts the FastAPI server.
 import os
 import sys
 import logging
+import traceback
+
+# Setup logging — both console (for Tauri to capture) and file (for debugging)
+log_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "sidecar.log")
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="w", encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger("sidecar")
+logger.info("Log file: %s", log_file)
 
 
 def find_free_port():
@@ -23,6 +34,14 @@ def find_free_port():
 
 
 def main():
+    try:
+        _main()
+    except Exception:
+        logger.error("Fatal error:\n%s", traceback.format_exc())
+        raise
+
+
+def _main():
     # Read port from Rust (Tauri passes AVC_PORT env var), or find one
     port = int(os.environ.get("AVC_PORT", 0)) or find_free_port()
     host = "127.0.0.1"
@@ -39,7 +58,12 @@ def main():
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     os.chdir(base_dir)
+    logger.info("Executable: %s", sys.executable)
     logger.info("Base directory: %s", base_dir)
+    logger.info("Frozen: %s", getattr(sys, "frozen", False))
+    if getattr(sys, "frozen", False):
+        logger.info("MEIPASS: %s", getattr(sys, "_MEIPASS", "N/A"))
+    logger.info("sys.path: %s", sys.path[:5])
 
     # Check what's available
     try:
