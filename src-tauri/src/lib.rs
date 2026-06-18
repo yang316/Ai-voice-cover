@@ -53,22 +53,26 @@ pub fn run() {
             let sidecar_dir = resource_dir.join("sidecar");
             let launcher = sidecar_dir.join("sidecar-launcher.py");
 
-            // Find Python — embedded in bundle or system
-            let python = find_python(&sidecar_dir);
-
             if !launcher.exists() {
                 eprintln!("Launcher not found at {:?}", launcher);
+                eprintln!("Resource dir: {:?}", resource_dir);
                 return Ok(());
             }
 
-            if python.is_none() {
-                eprintln!("Python not found. Please install Python 3.11+");
-                return Ok(());
-            }
+            // Find Python — embedded in bundle (Windows) or system
+            let python = find_python(&sidecar_dir);
 
-            let python = python.unwrap();
+            let python = match python {
+                Some(p) => p,
+                None => {
+                    eprintln!("Python 3.11+ not found. Please install Python.");
+                    return Ok(());
+                }
+            };
+
             println!("Python: {:?}", python);
             println!("Launcher: {:?}", launcher);
+            println!("Sidecar dir: {:?}", sidecar_dir);
 
             let child = Command::new(&python)
                 .arg(&launcher)
@@ -116,7 +120,6 @@ fn find_python(sidecar_dir: &std::path::Path) -> Option<std::path::PathBuf> {
             if output.status.success() {
                 if let Ok(ver) = String::from_utf8(output.stdout) {
                     if ver.contains("3.11") || ver.contains("3.12") || ver.contains("3.13") {
-                        // Get full path
                         #[cfg(target_os = "windows")]
                         let cmd = "where";
                         #[cfg(not(target_os = "windows"))]
@@ -130,7 +133,6 @@ fn find_python(sidecar_dir: &std::path::Path) -> Option<std::path::PathBuf> {
                                 }
                             }
                         }
-                        // Fallback: just use the name
                         return Some(std::path::PathBuf::from(name));
                     }
                 }
