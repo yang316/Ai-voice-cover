@@ -69,8 +69,19 @@ def setup_pip(python: str) -> bool:
         logger.info("pip bootstrapped successfully")
         return True
     except subprocess.CalledProcessError as e:
-        logger.error("Failed to bootstrap pip: %s", e)
-        return False
+        logger.error("ensurepip failed (exit %s): %s", e.returncode, e)
+        # Fallback: try get-pip.py
+        logger.info("Trying get-pip.py fallback...")
+        try:
+            import urllib.request
+            get_pip = str(_data_dir / "get-pip.py")
+            urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", get_pip)
+            subprocess.check_call([python, get_pip, "--no-warn-script-location"])
+            logger.info("pip installed via get-pip.py")
+            return True
+        except Exception as e2:
+            logger.error("get-pip.py also failed: %s", e2)
+            return False
 
 
 def install_deps(python: str) -> bool:
