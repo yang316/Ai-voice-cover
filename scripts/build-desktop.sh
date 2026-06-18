@@ -44,7 +44,7 @@ cp -r frontend-vue/dist "$SIDECAr_DIR/frontend-vue/dist"
 # Download embedded Python (Windows only)
 if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
     echo "  Downloading embedded Python for Windows..."
-    PYTHON_VERSION="3.11.10"
+    PYTHON_VERSION="3.11.9"
     PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip"
     PYTHON_DIR="$SIDECAr_DIR/python"
     mkdir -p "$PYTHON_DIR"
