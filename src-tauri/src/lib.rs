@@ -1,37 +1,29 @@
 // AI Voice Cover - Tauri Backend
 // Manages the Python sidecar process and provides native APIs
 
-use std::net::TcpListener;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use tauri::Manager;
 
+const BACKEND_PORT: u16 = 9527;
+
 struct AppState {
     sidecar: Mutex<Option<Child>>,
-    port: Mutex<u16>,
-}
-
-fn find_free_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap().port()
 }
 
 #[tauri::command]
-fn get_backend_port(state: tauri::State<AppState>) -> u16 {
-    *state.port.lock().unwrap()
+fn get_backend_port() -> u16 {
+    BACKEND_PORT
 }
 
 #[tauri::command]
-fn get_backend_url(state: tauri::State<AppState>) -> String {
-    let port = *state.port.lock().unwrap();
-    format!("http://127.0.0.1:{}", port)
+fn get_backend_url() -> String {
+    format!("http://127.0.0.1:{}", BACKEND_PORT)
 }
 
 #[tauri::command]
-async fn check_backend(state: tauri::State<'_, AppState>) -> Result<String, String> {
-    let port = *state.port.lock().unwrap();
-    let url = format!("http://127.0.0.1:{}/api/v1/health", port);
-
+async fn check_backend() -> Result<String, String> {
+    let url = format!("http://127.0.0.1:{}/api/v1/health", BACKEND_PORT);
     match reqwest::get(&url).await {
         Ok(resp) => resp.text().await.map_err(|e| e.to_string()),
         Err(e) => Err(format!("Backend not ready: {}", e)),
@@ -40,13 +32,10 @@ async fn check_backend(state: tauri::State<'_, AppState>) -> Result<String, Stri
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let port = find_free_port();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             sidecar: Mutex::new(None),
-            port: Mutex::new(port),
         })
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().unwrap();
@@ -59,9 +48,7 @@ pub fn run() {
                 return Ok(());
             }
 
-            // Find Python — embedded in bundle (Windows) or system
             let python = find_python(&sidecar_dir);
-
             let python = match python {
                 Some(p) => p,
                 None => {
@@ -76,7 +63,7 @@ pub fn run() {
             let child = Command::new(&python)
                 .arg(&launcher)
                 .current_dir(&sidecar_dir)
-                .env("AVC_PORT", port.to_string())
+                .env("AVC_PORT", BACKEND_PORT.to_string())
                 .spawn()
                 .expect("Failed to start backend");
 
@@ -86,7 +73,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 for _ in 0..60 {
                     std::thread::sleep(std::time::Duration::from_secs(1));
-                    if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                    if std::net::TcpStream::connect(("127.0.0.1", BACKEND_PORT)).is_ok() {
                         break;
                     }
                 }

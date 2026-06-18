@@ -1,21 +1,28 @@
 import { ref } from 'vue'
 import type { Voice, Task, HealthStatus, CreateCoverRequest } from '@/types/api'
 
-// API base URL — Tauri 2 uses window.__TAURI__.core.invoke()
+// Fixed backend port — matches BACKEND_PORT in lib.rs
+const BACKEND_PORT = 9527
+
 const getApiBase = async (): Promise<string> => {
-  if (window.__TAURI__?.core?.invoke) {
+  // In Tauri, use fixed port
+  if (window.__TAURI__) {
     try {
-      const url = await window.__TAURI__.core.invoke('get_backend_url')
-      return `${url}/api/v1`
+      // Try Tauri 2 invoke first
+      if (window.__TAURI__?.core?.invoke) {
+        const url = await window.__TAURI__.core.invoke('get_backend_url')
+        return `${url}/api/v1`
+      }
     } catch (e) {
-      console.warn('Tauri backend URL not available, using default')
+      // fallback to fixed port
     }
+    return `http://127.0.0.1:${BACKEND_PORT}/api/v1`
   }
-  // Fallback for dev mode (Vite proxy)
+  // Dev mode (Vite proxy)
   return '/api/v1'
 }
 
-let apiBase = '/api/v1'
+let apiBase = `/api/v1`
 getApiBase().then(base => { apiBase = base })
 
 const api = (path: string) => `${apiBase}${path}`
@@ -24,7 +31,6 @@ export function useApi() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // 健康检查
   async function checkHealth(): Promise<HealthStatus> {
     try {
       const res = await fetch(api('/health'))
@@ -35,7 +41,6 @@ export function useApi() {
     }
   }
 
-  // 获取声音列表
   async function getVoices(): Promise<Voice[]> {
     const res = await fetch(api('/voices'))
     if (!res.ok) throw new Error('Failed to load voices')
@@ -49,7 +54,6 @@ export function useApi() {
     }))
   }
 
-  // 上传声音模型
   async function uploadVoice(data: {
     name: string
     description?: string
@@ -70,13 +74,11 @@ export function useApi() {
     return await res.json()
   }
 
-  // 删除声音模型
   async function deleteVoice(id: string): Promise<void> {
     const res = await fetch(api(`/voices/${id}`), { method: 'DELETE' })
     if (!res.ok) throw new Error('Delete failed')
   }
 
-  // 创建翻唱任务
   async function createCover(data: CreateCoverRequest): Promise<Task> {
     const formData = new FormData()
     formData.append('audio_file', data.audioFile)
@@ -95,14 +97,12 @@ export function useApi() {
     return await res.json()
   }
 
-  // 查询任务状态
   async function getTaskStatus(id: string): Promise<Task> {
     const res = await fetch(api(`/covers/${id}`))
     if (!res.ok) throw new Error('Failed to get task status')
     return await res.json()
   }
 
-  // 获取下载链接
   function getDownloadUrl(id: string): string {
     return api(`/covers/${id}/download`)
   }
