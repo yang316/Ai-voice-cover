@@ -72,7 +72,6 @@ pub fn run() {
 
             println!("Python: {:?}", python);
             println!("Launcher: {:?}", launcher);
-            println!("Sidecar dir: {:?}", sidecar_dir);
 
             let child = Command::new(&python)
                 .arg(&launcher)
