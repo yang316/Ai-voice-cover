@@ -50,6 +50,8 @@ pyinstaller \
     --hidden-import "uvicorn.protocols.websockets.auto" \
     --hidden-import "uvicorn.lifespan" \
     --hidden-import "uvicorn.lifespan.on" \
+    --hidden-import "sqlite3" \
+    --collect-submodules sqlite3 \
     scripts/sidecar-launcher.py
 
 # Copy sidecar to Tauri expected location

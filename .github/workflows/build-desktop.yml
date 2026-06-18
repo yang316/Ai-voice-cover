@@ -85,6 +85,8 @@ jobs:
             --hidden-import redis \
             --hidden-import celery \
             --hidden-import multipart \
+            --hidden-import sqlite3 \
+            --collect-submodules sqlite3 \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-x86_64-unknown-linux-gnu
@@ -170,6 +172,8 @@ jobs:
             --hidden-import redis \
             --hidden-import celery \
             --hidden-import multipart \
+            --hidden-import sqlite3 \
+            --collect-submodules sqlite3 \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server src-tauri/sidecar/ai-voice-cover-server-aarch64-apple-darwin
@@ -253,6 +257,8 @@ jobs:
             --hidden-import redis \
             --hidden-import celery \
             --hidden-import multipart \
+            --hidden-import sqlite3 \
+            --collect-submodules sqlite3 \
             scripts/sidecar-launcher.py
           mkdir -p src-tauri/sidecar
           cp dist/ai-voice-cover-server.exe src-tauri/sidecar/ai-voice-cover-server-x86_64-pc-windows-msvc.exe
