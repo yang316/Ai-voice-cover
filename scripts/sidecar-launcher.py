@@ -6,6 +6,7 @@ Works with both embedded Python (bundled) and system Python.
 """
 import os
 import sys
+import platform
 import subprocess
 import logging
 import traceback
@@ -163,6 +164,55 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 
+def _fix_rocm_path_if_needed(base_dir: Path):
+    """Create a space-free junction for ROCm SDK path on Windows.
+
+    ROCm tools (offload-arch.exe etc.) break when paths contain spaces.
+    If the install path has spaces, create a junction at C:\\_avc_rocm
+    and set ROCM_PATH / HIP_PATH environment variables.
+    """
+    base_str = str(base_dir)
+    if " " not in base_str:
+        return  # Path is fine
+
+    # Find the _rocm_sdk_core directory in site-packages
+    site_packages = base_dir / "python" / "Lib" / "site-packages"
+    if not site_packages.exists():
+        site_packages = base_dir / "python" / "lib" / "site-packages"
+    if not site_packages.exists():
+        return
+
+    rocm_core = site_packages / "_rocm_sdk_core"
+    if not rocm_core.exists():
+        return  # ROCm not installed
+
+    # Create a junction from a space-free path
+    junction_path = Path("C:\\_avc_rocm")
+    try:
+        if junction_path.exists():
+            # Already exists, just set env vars
+            pass
+        else:
+            import subprocess
+            subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction_path), str(site_packages)],
+                check=True, capture_output=True,
+            )
+            logger.info("Created ROCm junction: %s -> %s", junction_path, site_packages)
+
+        # Set ROCm environment variables to use the junction path
+        rocm_root = junction_path / "_rocm_sdk_core"
+        os.environ["ROCM_PATH"] = str(rocm_root)
+        os.environ["HIP_PATH"] = str(rocm_root)
+        # Also add the bin dirs to PATH so ROCm tools are found
+        for bin_dir in [rocm_root / "bin", rocm_root / "lib" / "llvm" / "bin"]:
+            if bin_dir.exists():
+                os.environ["PATH"] = str(bin_dir) + ";" + os.environ.get("PATH", "")
+        logger.info("ROCm env configured: ROCM_PATH=%s", rocm_root)
+    except Exception as e:
+        logger.warning("Failed to fix ROCm path: %s", e)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     try:
@@ -218,6 +268,11 @@ def _main():
 
     os.environ["AVC_PORT"] = str(port)
     os.environ["AVC_HOST"] = host
+
+    # Fix ROCm path-with-spaces issue on Windows
+    # ROCm tools (offload-arch.exe etc.) break when installed under "Program Files"
+    if platform.system() == "Windows":
+        _fix_rocm_path_if_needed(Path(base_dir))
 
     # Optional: check ML deps
     try:
