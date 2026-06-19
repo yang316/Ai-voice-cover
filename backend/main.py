@@ -101,11 +101,13 @@ def health():
     try:
         from backend.api.ml_routes import _check_torch_backend, _detect_gpu
         torch_info = _check_torch_backend()
+        gpu_detection = _detect_gpu()
+        logger.info("Health check: torch=%s, gpu=%s, upgradeable=%s",
+                     torch_info, gpu_detection.get("vendor"), torch_info.get("gpu_upgradeable"))
         if torch_info.get("gpu_upgradeable"):
             gpu_upgradeable = True
-        gpu_detection = _detect_gpu()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Health GPU check failed: %s", e)
 
     return {
         "status": "online",
