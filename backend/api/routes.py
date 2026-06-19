@@ -50,34 +50,7 @@ def _to_task_info(data: dict) -> TaskInfo:
     )
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health():
-    """Health check with backend availability and device info."""
-    backends = {}
-    for bt in ComputeBackendType:
-        try:
-            create_backend(bt)
-            backends[bt.value] = True
-        except Exception:
-            backends[bt.value] = False
-
-    from backend.core.device import get_device_info
-    device = get_device_info()
-
-    # Build GPU info for frontend
-    gpu_info = {
-        "available": device["best_device"] != "cpu",
-        "device": device["devices"][0]["name"] if device["devices"] else "CPU"
-    }
-
-    return HealthResponse(
-        status="online",
-        gpu=gpu_info,
-        backends=backends,
-        device_type=device["best_device"],
-        device_name=device["devices"][0]["name"] if device["devices"] else "Unknown",
-        devices=[{"name": d["name"], "type": d["type"], "available": True} for d in device["devices"]],
-    )
+# NOTE: /health is defined in main.py (includes features field)
 
 
 @router.post("/covers", response_model=TaskResponse)
