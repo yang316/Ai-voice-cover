@@ -98,11 +98,10 @@ def health():
     # Check if GPU upgrade is available (CPU-only torch on a GPU machine)
     gpu_upgradeable = False
     try:
-        from backend.api.ml_routes import _check_torch_backend, _detect_amd_gpu
+        from backend.api.ml_routes import _check_torch_backend
         torch_info = _check_torch_backend()
         if torch_info.get("gpu_upgradeable"):
             gpu_upgradeable = True
-            gpu_info["upgrade_hint"] = f"GPU detected but PyTorch is CPU-only. Click install to use GPU."
     except Exception:
         pass
 

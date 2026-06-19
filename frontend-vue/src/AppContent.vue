@@ -39,7 +39,7 @@
             :disabled="mlInstalling"
             @click="installMlDeps"
           >
-            {{ mlInstalling ? mlProgress : t('installMlDeps') }}
+            {{ installMlLabel }}
           </button>
         </div>
         <button class="lang-toggle" @click="toggleLang">
@@ -250,11 +250,17 @@ const mlProgress = ref('')
 const showInstallMl = computed(() => {
   if (appStore.health.status !== 'online') return false
   const features = (appStore.health as any).features
-  // Show if ML features are missing
   if (features?.missing?.some((f: string) => ['covers', 'training'].includes(f))) return true
-  // Show if GPU upgrade available (e.g. CPU-only torch on a GPU machine)
   if ((appStore.health as any).gpu_upgradeable) return true
   return false
+})
+
+const installMlLabel = computed(() => {
+  if (mlInstalling.value) return mlProgress.value
+  const gpu = (appStore.health as any).gpu
+  if (gpu?.vendor === 'nvidia') return t('installMlDeps') + ' (NVIDIA)'
+  if (gpu?.vendor === 'amd') return t('installMlDeps') + ' (AMD)'
+  return t('installMlDeps')
 })
 
 async function installMlDeps() {
