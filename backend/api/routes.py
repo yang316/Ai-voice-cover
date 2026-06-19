@@ -55,7 +55,7 @@ def _to_task_info(data: dict) -> TaskInfo:
 
 @router.post("/covers", response_model=TaskResponse)
 async def create_cover(
-    file: UploadFile = File(...),
+    audio_file: UploadFile = File(...),
     voice_id: str = Form(...),
     backend: ComputeBackend = Form(ComputeBackend.LOCAL),
     pitch_shift: int = Form(0),
@@ -63,15 +63,15 @@ async def create_cover(
     api_key: str | None = Form(None),
 ):
     """Upload a song and create an AI voice cover."""
-    if not file.filename:
+    if not audio_file.filename:
         raise HTTPException(400, "No file uploaded")
 
     task_id = uuid.uuid4().hex[:12]
-    ext = Path(file.filename).suffix or ".mp3"
+    ext = Path(audio_file.filename).suffix or ".mp3"
     input_path = settings.upload_dir / f"{task_id}{ext}"
 
     with open(input_path, "wb") as f:
-        content = await file.read()
+        content = await audio_file.read()
         f.write(content)
 
     now = datetime.now(timezone.utc).isoformat()
