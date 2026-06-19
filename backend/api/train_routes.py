@@ -1,4 +1,5 @@
 """Training API routes."""
+import re
 import uuid
 import asyncio
 import logging
@@ -22,8 +23,65 @@ from backend.training.trainer import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# In-memory training tasks (use DB in production)
+# In-memory training tasks with JSON persistence
 _training_tasks: dict[str, TrainingProgress] = {}
+_persist_dir = settings.output_dir / "training"
+_persist_dir.mkdir(parents=True, exist_ok=True)
+
+_MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100MB per audio file
+_ALLOWED_AUDIO_EXTS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".wma"}
+
+
+def _save_progress(task_id: str, progress: TrainingProgress):
+    """Persist training progress to disk."""
+    import json
+    data = {
+        "task_id": task_id,
+        "status": progress.status.value,
+        "epoch": progress.epoch,
+        "total_epochs": progress.total_epochs,
+        "loss": progress.loss,
+        "message": progress.message,
+        "model_path": progress.model_path,
+        "stage_pct": progress.stage_pct,
+    }
+    path = _persist_dir / task_id / "progress.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning("Failed to persist progress for %s: %s", task_id, e)
+
+
+def _load_persisted_tasks():
+    """Load persisted training tasks on startup."""
+    import json
+    if not _persist_dir.exists():
+        return
+    for task_dir in _persist_dir.iterdir():
+        progress_file = task_dir / "progress.json"
+        if not progress_file.exists():
+            continue
+        try:
+            with open(progress_file) as f:
+                data = json.load(f)
+            task_id = data.get("task_id", task_dir.name)
+            _training_tasks[task_id] = TrainingProgress(
+                status=TrainingStatus(data.get("status", "pending")),
+                total_epochs=data.get("total_epochs", 0),
+                message=data.get("message", ""),
+            )
+            _training_tasks[task_id].epoch = data.get("epoch", 0)
+            _training_tasks[task_id].loss = data.get("loss", 0.0)
+            _training_tasks[task_id].model_path = data.get("model_path")
+            _training_tasks[task_id].stage_pct = data.get("stage_pct", 0)
+        except Exception as e:
+            logger.warning("Failed to load progress from %s: %s", progress_file, e)
+
+
+# Load on import
+_load_persisted_tasks()
 
 
 class TrainingRequest(BaseModel):
@@ -57,11 +115,17 @@ async def start_training(
     if not audio_files:
         raise HTTPException(400, "No audio files uploaded")
 
+    # Validate model_name: alphanumeric with hyphens/underscores, no path traversal
+    if not re.match(r'^[a-zA-Z0-9_\-\u4e00-\u9fff]+$', model_name):
+        raise HTTPException(400, "model_name can only contain letters, numbers, hyphens, underscores, and Chinese characters")
+    if '..' in model_name or '/' in model_name or '\\' in model_name:
+        raise HTTPException(400, "Invalid model_name")
+
     task_id = uuid.uuid4().hex[:12]
     work_dir = settings.output_dir / "training" / task_id
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save uploaded audio files
+    # Save uploaded audio files with validation
     audio_paths = []
     uploads_dir = work_dir / "uploads"
     uploads_dir.mkdir(exist_ok=True)
@@ -69,15 +133,21 @@ async def start_training(
     for f in audio_files:
         if not f.filename:
             continue
-        ext = Path(f.filename).suffix or ".wav"
-        save_path = uploads_dir / f"{uuid.uuid4().hex[:8]}{ext}"
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _ALLOWED_AUDIO_EXTS:
+            continue
         content = await f.read()
+        if len(content) > _MAX_AUDIO_SIZE:
+            raise HTTPException(413, f"Audio file '{f.filename}' too large (max 100MB)")
+        if len(content) < 1024:  # Skip files smaller than 1KB
+            continue
+        save_path = uploads_dir / f"{uuid.uuid4().hex[:8]}{ext}"
         with open(save_path, "wb") as fp:
             fp.write(content)
         audio_paths.append(save_path)
 
     if not audio_paths:
-        raise HTTPException(400, "No valid audio files")
+        raise HTTPException(400, "No valid audio files (supported: wav, mp3, flac, ogg, m4a)")
 
     config = TrainingConfig(
         model_name=model_name,
@@ -109,10 +179,14 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
     """Background training task."""
     progress = _training_tasks[task_id]
 
+    def _persist():
+        _save_progress(task_id, progress)
+
     try:
         # Step 1: Prepare data (0-15% overall)
         progress.status = TrainingStatus.PREPARING
         progress.message = "Preparing training data..."
+        _persist()
 
         preparer = DataPreparer(work_dir)
 
@@ -126,6 +200,7 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
         progress.status = TrainingStatus.EXTRACTING
         progress.stage_pct = 0
         progress.message = "Extracting HuBERT features..."
+        _persist()
 
         extractor = FeatureExtractor(work_dir, config.f0_method)
 
@@ -144,6 +219,7 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
         progress.status = TrainingStatus.TRAINING
         progress.stage_pct = 0
         progress.message = "Training model..."
+        _persist()
 
         trainer = RVCTrainer(work_dir, config)
 
@@ -153,6 +229,9 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
             progress.loss = loss
             progress.stage_pct = epoch / total * 100
             progress.message = f"Training: epoch {epoch}/{total}, loss={loss:.6f}"
+            # Persist every 10 epochs to avoid excessive I/O
+            if epoch % 10 == 0 or epoch == total:
+                _persist()
 
         model_path = await trainer.train(model_dir, on_progress=on_progress)
 
@@ -166,11 +245,13 @@ async def _run_training(task_id: str, audio_paths: list[Path], config: TrainingC
         progress.status = TrainingStatus.COMPLETED
         progress.message = f"Training complete! Model saved to {dest}"
         progress.model_path = str(dest)
+        _persist()
         logger.info(f"Training {task_id} complete: {dest}")
 
     except Exception as e:
         progress.status = TrainingStatus.FAILED
         progress.message = f"Training failed: {str(e)}"
+        _persist()
         logger.error(f"Training {task_id} failed: {e}", exc_info=True)
 
 

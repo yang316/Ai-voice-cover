@@ -1,8 +1,8 @@
 import { ref } from 'vue'
 import type { Voice, Task, HealthStatus, CreateCoverRequest } from '@/types/api'
 
-// Fixed backend port — matches BACKEND_PORT in lib.rs
-const BACKEND_PORT = 9527
+// Backend port — reads from env, falls back to 9527
+const BACKEND_PORT = import.meta.env.VITE_AVC_PORT || '9527'
 const BACKEND_BASE = `http://127.0.0.1:${BACKEND_PORT}/api/v1`
 
 let apiBase = BACKEND_BASE

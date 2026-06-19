@@ -1,5 +1,7 @@
 """API routes."""
+import re
 import uuid
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +22,10 @@ from backend.config import settings
 from backend.core.database import get_all_tasks, get_task, save_task
 
 router = APIRouter()
+
+# Concurrency control: max 1 cover task at a time
+_cover_semaphore = threading.Semaphore(1)
+_MAX_UPLOAD_SIZE = 200 * 1024 * 1024  # 200MB
 
 
 def _to_task_info(data: dict) -> TaskInfo:
@@ -66,12 +72,29 @@ async def create_cover(
     if not audio_file.filename:
         raise HTTPException(400, "No file uploaded")
 
+    # Validate voice_id: must be alphanumeric with hyphens/underscores only
+    if not re.match(r'^[a-zA-Z0-9_-]+$', voice_id):
+        raise HTTPException(400, "Invalid voice_id format")
+
+    # Check voice exists
+    voice_dir = settings.voices_dir / voice_id
+    if not voice_dir.exists():
+        raise HTTPException(404, f"Voice model '{voice_id}' not found")
+
+    # Validate pitch_shift range
+    if not -24 <= pitch_shift <= 24:
+        raise HTTPException(400, "pitch_shift must be between -24 and +24")
+
+    # Read file with size limit
+    content = await audio_file.read()
+    if len(content) > _MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large (max {_MAX_UPLOAD_SIZE // 1024 // 1024}MB)")
+
     task_id = uuid.uuid4().hex[:12]
     ext = Path(audio_file.filename).suffix or ".mp3"
     input_path = settings.upload_dir / f"{task_id}{ext}"
 
     with open(input_path, "wb") as f:
-        content = await audio_file.read()
         f.write(content)
 
     now = datetime.now(timezone.utc).isoformat()
@@ -86,15 +109,20 @@ async def create_cover(
         created_at=now,
     )
 
-    # Run cover processing in background thread (desktop mode)
-    # In server mode with Celery, use process_cover.delay() instead
-    import threading
+    # Run cover processing in background thread with concurrency limit
     from backend.workers.tasks import process_cover
-    threading.Thread(
-        target=process_cover,
-        args=(task_id, str(input_path), voice_id, backend.value, pitch_shift, denoise, api_key),
-        daemon=True,
-    ).start()
+
+    def _run_with_semaphore():
+        acquired = _cover_semaphore.acquire(timeout=5)
+        if not acquired:
+            update_task(task_id, status=TaskStatus.FAILED, message="Another cover task is already running. Please wait.")
+            return
+        try:
+            process_cover(task_id, str(input_path), voice_id, backend.value, pitch_shift, denoise, api_key)
+        finally:
+            _cover_semaphore.release()
+
+    threading.Thread(target=_run_with_semaphore, daemon=True).start()
 
     return TaskResponse(task_id=task_id, status=TaskStatus.PENDING, message="Task created")
 

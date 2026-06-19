@@ -5,7 +5,10 @@ Uses transformers HuBERT + RVC Pipeline for real voice conversion.
 import logging
 import os
 import sys
+import threading
+from collections import OrderedDict
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import soundfile as sf
@@ -19,10 +22,14 @@ _rvc_dir = Path(__file__).parent / "rvc"
 if str(_rvc_dir) not in sys.path:
     sys.path.insert(0, str(_rvc_dir))
 
-# Model cache
-_model_cache: dict = {}
+# Thread-safe model cache with LRU eviction (max 3 models)
+_MAX_CACHED_MODELS = 3
+_model_cache: OrderedDict[str, dict] = OrderedDict()
+_cache_lock = threading.Lock()
 _hubert_model = None
+_hubert_lock = threading.Lock()
 _pipeline = None
+_pipeline_lock = threading.Lock()
 
 
 class _HubertAdapter:
@@ -154,33 +161,34 @@ def _load_hubert_from_fairseq(ckpt_path: str, device: torch.device):
 def load_hubert():
     """Load HuBERT model for feature extraction."""
     global _hubert_model
-    if _hubert_model is not None:
-        return _hubert_model
+    with _hubert_lock:
+        if _hubert_model is not None:
+            return _hubert_model
 
-    device = get_device()
+        device = get_device()
 
-    # Load from local fairseq checkpoint (converted to transformers format)
-    local_path = Path(__file__).parent.parent.parent / "assets" / "hubert" / "hubert_base.pt"
-    if local_path.exists():
+        # Load from local fairseq checkpoint (converted to transformers format)
+        local_path = Path(__file__).parent.parent.parent / "assets" / "hubert" / "hubert_base.pt"
+        if local_path.exists():
+            try:
+                model = _load_hubert_from_fairseq(str(local_path), device)
+                _hubert_model = _HubertAdapter(model)
+                return _hubert_model
+            except Exception as e:
+                logger.warning(f"Failed to load local HuBERT: {e}")
+
+        # Fallback: try downloading from HuggingFace
         try:
-            model = _load_hubert_from_fairseq(str(local_path), device)
+            from transformers import HubertModel
+            logger.info("Downloading HuBERT from HuggingFace...")
+            model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
+            model = model.to(device).eval()
             _hubert_model = _HubertAdapter(model)
+            logger.info("Loaded HuBERT from HuggingFace")
             return _hubert_model
         except Exception as e:
-            logger.warning(f"Failed to load local HuBERT: {e}")
-
-    # Fallback: try downloading from HuggingFace
-    try:
-        from transformers import HubertModel
-        logger.info("Downloading HuBERT from HuggingFace...")
-        model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
-        model = model.to(device).eval()
-        _hubert_model = _HubertAdapter(model)
-        logger.info("Loaded HuBERT from HuggingFace")
-        return _hubert_model
-    except Exception as e:
-        logger.error(f"Failed to load HuBERT: {e}")
-        return None
+            logger.error(f"Failed to load HuBERT: {e}")
+            return None
 
 
 def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
@@ -188,8 +196,11 @@ def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
     model_path = Path(model_path)
     cache_key = str(model_path.resolve())
 
-    if cache_key in _model_cache:
-        return _model_cache[cache_key]
+    # Thread-safe LRU cache lookup
+    with _cache_lock:
+        if cache_key in _model_cache:
+            _model_cache.move_to_end(cache_key)
+            return _model_cache[cache_key]
 
     if device is None:
         device = get_device()
@@ -288,7 +299,21 @@ def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
             "model_type": "rvc",
         }
 
-    _model_cache[cache_key] = model_data
+    # Thread-safe LRU cache insert with eviction
+    with _cache_lock:
+        _model_cache[cache_key] = model_data
+        _model_cache.move_to_end(cache_key)
+        # Evict oldest if over capacity
+        while len(_model_cache) > _MAX_CACHED_MODELS:
+            evicted_key, evicted_val = _model_cache.popitem(last=False)
+            # Release GPU memory from evicted model
+            try:
+                del evicted_val["net_g"]
+            except Exception:
+                pass
+            logger.info(f"Evicted cached model: {evicted_key}")
+    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+
     logger.info(f"RVC model loaded: version={version}, sr={tgt_sr}, f0={bool(if_f0)}, type={model_data['model_type']}")
     return model_data
 
@@ -296,22 +321,23 @@ def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
 def get_pipeline() -> "Pipeline":
     """Get or create RVC Pipeline instance."""
     global _pipeline
-    if _pipeline is not None:
+    with _pipeline_lock:
+        if _pipeline is not None:
+            return _pipeline
+
+        from infer.modules.vc.pipeline import Pipeline
+
+        class Config:
+            def __init__(self):
+                self.device = get_device()
+                self.is_half = self.device.type == "cuda"
+                self.x_pad = 3
+                self.x_query = 10
+                self.x_center = 60
+                self.x_max = 65
+
+        _pipeline = Pipeline(40000, Config())  # Default SR, will be overridden
         return _pipeline
-
-    from infer.modules.vc.pipeline import Pipeline
-
-    class Config:
-        def __init__(self):
-            self.device = get_device()
-            self.is_half = self.device.type == "cuda"
-            self.x_pad = 3
-            self.x_query = 10
-            self.x_center = 60
-            self.x_max = 65
-
-    _pipeline = Pipeline(40000, Config())  # Default SR, will be overridden
-    return _pipeline
 
 
 def extract_f0(audio: np.ndarray, sr: int, pitch_shift: int = 0, method: str = "pm") -> np.ndarray:

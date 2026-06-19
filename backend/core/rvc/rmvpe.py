@@ -647,24 +647,26 @@ class RMVPE:
 
 
 if __name__ == "__main__":
+    import argparse
     import librosa
     import soundfile as sf
 
-    audio, sampling_rate = sf.read(r"C:\Users\liujing04\Desktop\Z\冬之花clip1.wav")
+    parser = argparse.ArgumentParser(description="RMVPE F0 extraction test")
+    parser.add_argument("audio", help="Path to audio file (WAV)")
+    parser.add_argument("--model", required=True, help="Path to rmvpe.pt model")
+    parser.add_argument("--threshold", type=float, default=0.03, help="F0 threshold")
+    args = parser.parse_args()
+
+    audio, sampling_rate = sf.read(args.audio)
     if len(audio.shape) > 1:
         audio = librosa.to_mono(audio.transpose(1, 0))
-    audio_bak = audio.copy()
     if sampling_rate != 16000:
         audio = librosa.resample(audio, orig_sr=sampling_rate, target_sr=16000)
-    model_path = r"D:\BaiduNetdiskDownload\RVC-beta-v2-0727AMD_realtime\rmvpe.pt"
-    thred = 0.03  # 0.01
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    rmvpe = RMVPE(model_path, is_half=False, device=device)
-    t0 = ttime()
-    f0 = rmvpe.infer_from_audio(audio, thred=thred)
+    rmvpe = RMVPE(args.model, is_half=False, device=device)
+    f0 = rmvpe.infer_from_audio(audio, thred=args.threshold)
+    print(f"Extracted F0: {len(f0)} frames, voiced: {(f0 > 0).sum()}")
     # f0 = rmvpe.infer_from_audio(audio, thred=thred)
     # f0 = rmvpe.infer_from_audio(audio, thred=thred)
     # f0 = rmvpe.infer_from_audio(audio, thred=thred)
     # f0 = rmvpe.infer_from_audio(audio, thred=thred)
-    t1 = ttime()
-    logger.info("%s %.2f", f0.shape, t1 - t0)
