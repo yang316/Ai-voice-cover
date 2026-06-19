@@ -29,9 +29,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
             sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
+            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -112,9 +112,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            sed -i '' "s/\\\"version\\\": \\\"[^\\\"]*\\\"/\\\"version\\\": \\\"$VERSION\\\"/\" src-tauri/tauri.conf.json
-            sed -i '' "s/^version = \\\"[^\\\"]*\\\"/version = \\\"$VERSION\\\"/\" src-tauri/Cargo.toml
-            perl -i -pe "s/\\\"version\\\": \\\"[^\\\"]*\\\"/\\\"version\\\": \\\"$VERSION\\\"/ if 1 .. 1" package.json
+            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
+            sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -181,9 +181,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
             sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
+            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -208,9 +208,7 @@ jobs:
 
           # Enable pip (uncomment import site)
           sed -i 's/#import site/import site/' "$PYTHON_DIR/python311._pth"
-          # Ensure Lib\site-packages is always on sys.path. ._pth entries are
-          # added regardless of whether the dir exists yet, so packages pip
-          # installs on first run are importable from startup.
+          # Ensure Lib\site-packages is always on sys.path
           grep -qxF 'Lib\site-packages' "$PYTHON_DIR/python311._pth" || \
             printf 'Lib\\site-packages\n' >> "$PYTHON_DIR/python311._pth"
 
