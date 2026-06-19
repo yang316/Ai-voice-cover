@@ -339,13 +339,20 @@ def rvc_convert(
     model_path = pth_files[0]
     index_files = list(voice_dir.glob("*.index"))
     index_path = str(index_files[0]) if index_files else ""
+    logger.info(f"Model: {model_path}, Index: {index_path or 'none'}, Device: {device}")
 
     # Load model
-    model_data = load_rvc_model(str(model_path), device)
+    try:
+        model_data = load_rvc_model(str(model_path), device)
+    except Exception as e:
+        logger.error(f"load_rvc_model failed: {e}", exc_info=True)
+        raise
+
     net_g = model_data["net_g"]
     tgt_sr = model_data["tgt_sr"]
     if_f0 = model_data["if_f0"]
     version = model_data["version"]
+    logger.info(f"Model loaded: sr={tgt_sr}, f0={if_f0}, version={version}")
 
     # Load HuBERT
     hubert = load_hubert()
@@ -360,6 +367,7 @@ def rvc_convert(
     audio, sr = sf.read(input_path)
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
+    logger.info(f"Input audio: {len(audio)/sr:.1f}s, sr={sr}")
 
     # Resample to 16kHz
     if sr != 16000:
@@ -371,7 +379,7 @@ def rvc_convert(
     # Normalize
     audio_max = np.abs(audio).max() / 0.95
     if audio_max > 1:
-        audio = audio_max
+        audio = audio / audio_max
 
     # Prepare F0 tensors
     pitch = None
