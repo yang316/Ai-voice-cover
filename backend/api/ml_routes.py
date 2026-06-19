@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import threading
+import importlib.util
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -16,16 +17,20 @@ _install_status = {
 }
 
 
+def _check_module(name: str) -> bool:
+    """Check if a module is installed without importing it."""
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
+
+
 @router.get("/ml/status")
 def ml_status():
     """Check if ML dependencies are installed."""
     deps = {}
     for mod in ("torch", "torchaudio", "demucs", "soundfile", "numpy"):
-        try:
-            __import__(mod)
-            deps[mod] = True
-        except ImportError:
-            deps[mod] = False
+        deps[mod] = _check_module(mod)
 
     all_installed = all(deps.values())
     return {
