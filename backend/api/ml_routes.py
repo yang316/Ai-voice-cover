@@ -157,9 +157,20 @@ def install_ml():
                 return
 
             if arch and arch in ROCM_INDEX_URLS:
-                # AMD GPU: install PyTorch from ROCm index first
-                _install_status["progress"] = f"检测到 AMD GPU ({arch})，安装 ROCm PyTorch..."
+                # AMD GPU: uninstall CPU torch first, then install ROCm version
+                _install_status["progress"] = f"检测到 AMD GPU ({arch})，准备安装 ROCm PyTorch..."
                 index_url = ROCM_INDEX_URLS[arch]
+
+                # Step 1: Uninstall existing torch first (CPU/other version)
+                _install_status["progress"] = "卸载旧版 PyTorch..."
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "uninstall", "-y",
+                     "torch", "torchaudio", "torchvision"],
+                    capture_output=True, text=True, timeout=300,
+                )
+
+                # Step 2: Install ROCm PyTorch
+                _install_status["progress"] = f"安装 ROCm PyTorch ({arch})..."
                 proc = subprocess.run(
                     [sys.executable, "-m", "pip", "install", "--quiet",
                      "--no-warn-script-location",
