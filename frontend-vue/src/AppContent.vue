@@ -33,6 +33,14 @@
             <span class="status-dot"></span>
             <span class="status-text">{{ statusText }}</span>
           </div>
+          <button
+            v-if="showInstallMl"
+            class="ml-install-btn"
+            :disabled="mlInstalling"
+            @click="installMlDeps"
+          >
+            {{ mlInstalling ? mlProgress : t('installMlDeps') }}
+          </button>
         </div>
         <button class="lang-toggle" @click="toggleLang">
           {{ appStore.lang === 'zh' ? 'EN' : '中文' }}
@@ -235,6 +243,43 @@ const uploadForm = ref({
   modelFile: null as any,
   indexFile: null as any,
 })
+
+// ML dependency installation
+const mlInstalling = ref(false)
+const mlProgress = ref('')
+const showInstallMl = computed(() => {
+  if (appStore.health.status !== 'online') return false
+  const features = (appStore.health as any).features
+  if (!features) return false
+  return features.missing?.some((f: string) => ['covers', 'training'].includes(f))
+})
+
+async function installMlDeps() {
+  mlInstalling.value = true
+  mlProgress.value = t('installingMl')
+  try {
+    await api.installMlDeps()
+    const poll = setInterval(async () => {
+      try {
+        const status = await api.getMlStatus()
+        mlProgress.value = status.progress || t('installingMl')
+        if (status.installed || status.error) {
+          clearInterval(poll)
+          mlInstalling.value = false
+          if (status.installed) {
+            message?.success(t('mlInstallSuccess'))
+            await checkBackendHealth()
+          } else if (status.error) {
+            message?.error(status.error)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 3000)
+  } catch (e: any) {
+    mlInstalling.value = false
+    message?.error('Failed to start installation')
+  }
+}
 
 const statusClass = computed(() => {
   if (appStore.health.status === 'offline') return 'status-offline'
@@ -486,6 +531,30 @@ onMounted(async () => {
   border-color: #3f3f46;
   color: #fafafa;
   background: rgba(24, 24, 27, 0.4);
+}
+
+.ml-install-btn {
+  margin-left: 12px;
+  padding: 6px 14px;
+  border: 1px solid #22c55e;
+  border-radius: 6px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.ml-install-btn:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #16a34a;
+}
+
+.ml-install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Tabs */
