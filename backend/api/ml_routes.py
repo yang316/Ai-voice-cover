@@ -6,8 +6,11 @@ import importlib.util
 import platform
 from pathlib import Path
 
+import logging
+
 from fastapi import APIRouter
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _install_status = {
@@ -63,10 +66,10 @@ def _detect_gpu() -> dict:
                     "pytorch_index": PYTORCH_INDEX_URLS["nvidia"],
                     "label": "NVIDIA CUDA",
                 }
+                logger.info("GPU detected: %s", result["label"])
                 return result
         except Exception:
             pass
-        # Linux AMD check would need ROCm tools, skip for now
         return result
 
     # Windows: query all GPUs via PowerShell
@@ -76,6 +79,8 @@ def _detect_gpu() -> dict:
              "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
             capture_output=True, text=True, timeout=10,
         )
+        logger.info("GPU detection: PowerShell rc=%d, stdout=%r, stderr=%r",
+                     r.returncode, r.stdout[:200], r.stderr[:200])
         if r.returncode != 0:
             return result
 
@@ -130,9 +135,10 @@ def _detect_gpu() -> dict:
                 }
                 return result
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("GPU detection failed: %s", e)
 
+    logger.info("GPU detection result: %s (%s)", result["vendor"], result["name"])
     return result
 
 
