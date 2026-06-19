@@ -184,7 +184,7 @@ def load_hubert():
 
 
 def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
-    """Load RVC model from .pth file."""
+    """Load RVC model from .pth file. Supports both standard RVC and training output formats."""
     model_path = Path(model_path)
     cache_key = str(model_path.resolve())
 
@@ -197,48 +197,99 @@ def load_rvc_model(model_path: str, device: torch.device = None) -> dict:
     logger.info(f"Loading RVC model: {model_path}")
     checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
 
-    cpt = checkpoint
-    tgt_sr = cpt["config"][-1]
-    cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
-    if_f0 = cpt.get("f0", 1)
-    version = cpt.get("version", "v1")
+    # Detect format: training output vs standard RVC
+    if "model_state_dict" in checkpoint:
+        # Training output format (SimpleVoiceModel)
+        logger.info("Detected training output format (SimpleVoiceModel)")
+        cfg = checkpoint.get("config", {})
+        tgt_sr = cfg.get("sample_rate", 44100)
+        version = cfg.get("version", "v2")
+        if_f0 = 1
 
-    from infer.lib.infer_pack.models import (
-        SynthesizerTrnMs256NSFsid,
-        SynthesizerTrnMs256NSFsid_nono,
-        SynthesizerTrnMs768NSFsid,
-        SynthesizerTrnMs768NSFsid_nono,
-    )
+        # Build SimpleVoiceModel and load weights
+        input_dim = cfg.get("input_dim", 768)
+        hidden_dim = cfg.get("hidden_dim", 256)
 
-    is_half = device.type == "cuda"
-    synth_classes = {
-        ("v1", 1): SynthesizerTrnMs256NSFsid,
-        ("v1", 0): SynthesizerTrnMs256NSFsid_nono,
-        ("v2", 1): SynthesizerTrnMs768NSFsid,
-        ("v2", 0): SynthesizerTrnMs768NSFsid_nono,
-    }
-    SynthClass = synth_classes.get((version, if_f0), SynthesizerTrnMs256NSFsid)
+        import torch.nn as nn
+        class SimpleVoiceModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.encoder = nn.Sequential(
+                    nn.Linear(input_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                )
+                self.decoder = nn.Sequential(
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, input_dim),
+                )
 
-    net_g = SynthClass(*cpt["config"], is_half=is_half)
-    del net_g.enc_q
-    net_g.load_state_dict(cpt["weight"], strict=False)
-    net_g.eval().to(device)
-    if is_half:
-        net_g = net_g.half()
+            def forward(self, x):
+                encoded = self.encoder(x)
+                decoded = self.decoder(encoded)
+                return decoded, encoded
+
+        net_g = SimpleVoiceModel()
+        net_g.load_state_dict(checkpoint["model_state_dict"])
+        net_g.eval().to(device).float()
+
+        model_data = {
+            "net_g": net_g,
+            "tgt_sr": tgt_sr,
+            "if_f0": if_f0,
+            "version": version,
+            "device": device,
+            "cpt": checkpoint,
+            "model_type": "simple",
+        }
     else:
-        net_g = net_g.float()
+        # Standard RVC format
+        logger.info("Detected standard RVC format")
+        cpt = checkpoint
+        tgt_sr = cpt["config"][-1]
+        cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
+        if_f0 = cpt.get("f0", 1)
+        version = cpt.get("version", "v1")
 
-    model_data = {
-        "net_g": net_g,
-        "tgt_sr": tgt_sr,
-        "if_f0": if_f0,
-        "version": version,
-        "device": device,
-        "cpt": cpt,
-    }
+        from infer.lib.infer_pack.models import (
+            SynthesizerTrnMs256NSFsid,
+            SynthesizerTrnMs256NSFsid_nono,
+            SynthesizerTrnMs768NSFsid,
+            SynthesizerTrnMs768NSFsid_nono,
+        )
+
+        is_half = device.type == "cuda"
+        synth_classes = {
+            ("v1", 1): SynthesizerTrnMs256NSFsid,
+            ("v1", 0): SynthesizerTrnMs256NSFsid_nono,
+            ("v2", 1): SynthesizerTrnMs768NSFsid,
+            ("v2", 0): SynthesizerTrnMs768NSFsid_nono,
+        }
+        SynthClass = synth_classes.get((version, if_f0), SynthesizerTrnMs256NSFsid)
+
+        net_g = SynthClass(*cpt["config"], is_half=is_half)
+        del net_g.enc_q
+        net_g.load_state_dict(cpt["weight"], strict=False)
+        net_g.eval().to(device)
+        if is_half:
+            net_g = net_g.half()
+        else:
+            net_g = net_g.float()
+
+        model_data = {
+            "net_g": net_g,
+            "tgt_sr": tgt_sr,
+            "if_f0": if_f0,
+            "version": version,
+            "device": device,
+            "cpt": cpt,
+            "model_type": "rvc",
+        }
 
     _model_cache[cache_key] = model_data
-    logger.info(f"RVC model loaded: version={version}, sr={tgt_sr}, f0={bool(if_f0)}")
+    logger.info(f"RVC model loaded: version={version}, sr={tgt_sr}, f0={bool(if_f0)}, type={model_data['model_type']}")
     return model_data
 
 
@@ -352,7 +403,14 @@ def rvc_convert(
     tgt_sr = model_data["tgt_sr"]
     if_f0 = model_data["if_f0"]
     version = model_data["version"]
-    logger.info(f"Model loaded: sr={tgt_sr}, f0={if_f0}, version={version}")
+    model_type = model_data.get("model_type", "rvc")
+    logger.info(f"Model loaded: sr={tgt_sr}, f0={if_f0}, version={version}, type={model_type}")
+
+    # SimpleVoiceModel from training is a feature autoencoder, not a full synthesizer.
+    # It can't generate audio directly — fall back to pitch shift.
+    if model_type == "simple":
+        logger.warning("SimpleVoiceModel detected — cannot generate audio directly. Using pitch-shift fallback.")
+        return _fallback_convert(input_path, output_path, pitch_shift, tgt_sr)
 
     # Load HuBERT
     hubert = load_hubert()
