@@ -1,4 +1,5 @@
 """Main pipeline: vocal separation -> voice conversion -> mixing."""
+import asyncio
 from typing import Callable, Optional
 import logging
 from pathlib import Path

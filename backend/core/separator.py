@@ -71,9 +71,11 @@ class VocalSeparator:
             import torchaudio
             wav = torchaudio.functional.resample(wav, sr, model.samplerate)
 
-        # Normalize
+        # Normalize — guard against silent audio (std=0)
         ref = wav.mean(0)
-        wav = (wav - ref.mean()) / ref.std()
+        std_val = ref.std()
+        if std_val > 1e-8:
+            wav = (wav - ref.mean()) / std_val
         mix = wav.unsqueeze(0).to(device)
 
         # Apply model
@@ -81,8 +83,11 @@ class VocalSeparator:
         with torch.no_grad():
             sources = apply_model(model, mix, device=device, progress=True)
 
-        # Un-normalize
-        sources = sources * ref.std() + ref.mean()
+        # Un-normalize (use saved std_val to avoid stale reference)
+        if std_val > 1e-8:
+            sources = sources * std_val + ref.mean()
+        else:
+            sources = sources + ref.mean()
 
         # sources shape: (1, num_sources, channels, samples)
         sources = sources[0]

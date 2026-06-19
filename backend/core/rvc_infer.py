@@ -439,13 +439,8 @@ def rvc_convert(
     if audio_max > 1:
         audio = audio / audio_max
 
-    # Prepare F0 tensors
-    pitch = None
-    pitchf = None
-    if if_f0:
-        f0 = extract_f0(audio, sr, pitch_shift, f0_method)
-        pitch = torch.LongTensor(f0).to(device).unsqueeze(0)
-        pitchf = pitch.float()
+    # Note: F0 extraction is handled internally by the Pipeline — no need to
+    # pre-extract pitch/pitchf here.
 
     # Use pipeline for inference
     try:

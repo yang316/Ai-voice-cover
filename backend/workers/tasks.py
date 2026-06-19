@@ -51,8 +51,7 @@ def process_cover(
 
         # Run pipeline
         output_dir = settings.output_dir / task_id
-        loop = asyncio.new_event_loop()
-        final_path = loop.run_until_complete(
+        final_path = asyncio.run(
             pipeline.run(
                 input_path=input_path,
                 voice_id=voice_id,
@@ -79,7 +78,6 @@ def process_cover(
             status=TaskStatus.FAILED,
             message=str(e),
         )
-        raise
 
 
 # Register as Celery task if available (server mode)

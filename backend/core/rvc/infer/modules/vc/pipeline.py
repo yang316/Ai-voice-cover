@@ -8,15 +8,32 @@ logger = logging.getLogger(__name__)
 from functools import lru_cache
 from time import time as ttime
 
-import faiss
-import librosa
 import numpy as np
-import parselmouth
-import pyworld
 import torch
 import torch.nn.functional as F
-import torchcrepe
 from scipy import signal
+
+# Optional imports — these may not be installed on all systems
+try:
+    import faiss
+except ImportError:
+    faiss = None
+try:
+    import librosa
+except ImportError:
+    librosa = None
+try:
+    import parselmouth
+except ImportError:
+    parselmouth = None
+try:
+    import pyworld
+except ImportError:
+    pyworld = None
+try:
+    import torchcrepe
+except ImportError:
+    torchcrepe = None
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -143,11 +160,16 @@ class Pipeline(object):
             if not hasattr(self, "model_rmvpe"):
                 from infer.lib.rmvpe import RMVPE
 
-                logger.info(
-                    "Loading rmvpe model,%s" % "%s/rmvpe.pt" % os.environ["rmvpe_root"]
-                )
+                rmvpe_root = os.environ.get("rmvpe_root", "")
+                rmvpe_path = os.path.join(rmvpe_root, "rmvpe.pt") if rmvpe_root else "rmvpe.pt"
+                if not os.path.exists(rmvpe_path):
+                    raise FileNotFoundError(
+                        f"rmvpe.pt not found at '{rmvpe_path}'. "
+                        "Set the 'rmvpe_root' environment variable or place rmvpe.pt in the working directory."
+                    )
+                logger.info("Loading rmvpe model: %s", rmvpe_path)
                 self.model_rmvpe = RMVPE(
-                    "%s/rmvpe.pt" % os.environ["rmvpe_root"],
+                    rmvpe_path,
                     is_half=self.is_half,
                     device=self.device,
                 )
@@ -300,7 +322,8 @@ class Pipeline(object):
         f0_file=None,
     ):
         if (
-            file_index != ""
+            faiss is not None
+            and file_index != ""
             # and file_big_npy != ""
             # and os.path.exists(file_big_npy) == True
             and os.path.exists(file_index)
