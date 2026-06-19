@@ -112,9 +112,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-            sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            sed -i '' "1,/\"version\": \"[^\"]*\"/s//\"version\": \"$VERSION\"/" package.json
+            sed -i '' "s/\\\"version\\\": \\\"[^\\\"]*\\\"/\\\"version\\\": \\\"$VERSION\\\"/\" src-tauri/tauri.conf.json
+            sed -i '' "s/^version = \\\"[^\\\"]*\\\"/version = \\\"$VERSION\\\"/\" src-tauri/Cargo.toml
+            perl -i -pe "s/\\\"version\\\": \\\"[^\\\"]*\\\"/\\\"version\\\": \\\"$VERSION\\\"/ if 1 .. 1" package.json
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
