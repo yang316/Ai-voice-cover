@@ -154,14 +154,15 @@ def _check_torch_backend() -> dict:
         import importlib.metadata
         ver = importlib.metadata.version("torch")
         info["version"] = ver
-        if "+cpu" in ver:
-            info["backend"] = "cpu"
-        elif "+rocm" in ver:
+        if "+rocm" in ver:
             info["backend"] = "rocm"
         elif "+cu" in ver:
             info["backend"] = "cuda"
+        elif "+cpu" in ver:
+            info["backend"] = "cpu"
         else:
-            info["backend"] = "unknown"
+            # Plain version (e.g. "2.12.1") = CPU-only wheel without suffix
+            info["backend"] = "cpu"
     except Exception:
         info["backend"] = "unknown"
 
