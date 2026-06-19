@@ -97,11 +97,13 @@ def health():
 
     # Check if GPU upgrade is available (CPU-only torch on a GPU machine)
     gpu_upgradeable = False
+    gpu_detection = None
     try:
-        from backend.api.ml_routes import _check_torch_backend
+        from backend.api.ml_routes import _check_torch_backend, _detect_gpu
         torch_info = _check_torch_backend()
         if torch_info.get("gpu_upgradeable"):
             gpu_upgradeable = True
+        gpu_detection = _detect_gpu()
     except Exception:
         pass
 
@@ -115,6 +117,7 @@ def health():
             "missing": sorted(_missing_features),
         },
         "gpu_upgradeable": gpu_upgradeable,
+        "gpu_detection": gpu_detection,
     }
 
 

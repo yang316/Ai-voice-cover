@@ -257,9 +257,9 @@ const showInstallMl = computed(() => {
 
 const installMlLabel = computed(() => {
   if (mlInstalling.value) return mlProgress.value
-  const gpu = (appStore.health as any).gpu
-  if (gpu?.vendor === 'nvidia') return t('installMlDeps') + ' (NVIDIA)'
-  if (gpu?.vendor === 'amd') return t('installMlDeps') + ' (AMD)'
+  const gpuDet = (appStore.health as any).gpu_detection
+  if (gpuDet?.vendor === 'nvidia') return t('installMlDeps') + ' (NVIDIA)'
+  if (gpuDet?.vendor === 'amd') return t('installMlDeps') + ' (AMD)'
   return t('installMlDeps')
 })
 
