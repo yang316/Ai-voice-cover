@@ -86,11 +86,15 @@ async def create_cover(
         created_at=now,
     )
 
+    # Run cover processing in background thread (desktop mode)
+    # In server mode with Celery, use process_cover.delay() instead
+    import threading
     from backend.workers.tasks import process_cover
-    process_cover.delay(
-        task_id, str(input_path), voice_id,
-        backend.value, pitch_shift, denoise, api_key,
-    )
+    threading.Thread(
+        target=process_cover,
+        args=(task_id, str(input_path), voice_id, backend.value, pitch_shift, denoise, api_key),
+        daemon=True,
+    ).start()
 
     return TaskResponse(task_id=task_id, status=TaskStatus.PENDING, message="Task created")
 

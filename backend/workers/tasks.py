@@ -1,17 +1,17 @@
-"""Celery tasks for voice cover processing."""
+"""Voice cover processing — works with or without Celery.
+
+Server mode: Celery decorator wraps process_cover as an async task.
+Desktop mode: process_cover is called directly in a thread.
+"""
 import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.workers.celery_app import celery
-
 logger = logging.getLogger(__name__)
 
 
-@celery.task(bind=True, max_retries=1)
 def process_cover(
-    self,
     task_id: str,
     input_path: str,
     voice_id: str,
@@ -20,7 +20,7 @@ def process_cover(
     denoise: bool = True,
     api_key: str | None = None,
 ):
-    """Process a voice cover task."""
+    """Process a voice cover task (runs in thread or Celery worker)."""
     from backend.api.routes import update_task
     from backend.api.schemas import TaskStatus, TaskStep
     from backend.backends.factory import ComputeBackendType, create_backend
@@ -80,3 +80,11 @@ def process_cover(
             message=str(e),
         )
         raise
+
+
+# Register as Celery task if available (server mode)
+try:
+    from backend.workers.celery_app import celery
+    _celery_process_cover = celery.task(bind=True, max_retries=1)(process_cover)
+except ImportError:
+    pass
