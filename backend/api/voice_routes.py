@@ -1,9 +1,11 @@
 """Voice model management API routes."""
 import json
+import re
 import shutil
 import uuid
 from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
@@ -11,6 +13,9 @@ from backend.api.schemas import VoiceInfo
 from backend.config import settings
 
 router = APIRouter()
+
+_MAX_MODEL_SIZE = 2 * 1024 * 1024 * 1024  # 2GB for .pth files
+_MAX_INDEX_SIZE = 500 * 1024 * 1024  # 500MB for .index files
 
 
 @router.get("/voices", response_model=list[VoiceInfo])
@@ -70,6 +75,17 @@ async def upload_voice(
     if not model_file.filename or not model_file.filename.endswith(".pth"):
         raise HTTPException(400, "Model file must be a .pth file")
 
+    # Validate name: alphanumeric with hyphens/underscores/spaces
+    if not re.match(r'^[a-zA-Z0-9_ \-\u4e00-\u9fff]+$', name):
+        raise HTTPException(400, "Voice name can only contain letters, numbers, spaces, hyphens, underscores")
+
+    # Read and validate model file size
+    model_content = await model_file.read()
+    if len(model_content) > _MAX_MODEL_SIZE:
+        raise HTTPException(413, f"Model file too large (max 2GB)")
+    if len(model_content) < 1024:
+        raise HTTPException(400, "Model file is too small to be a valid .pth file")
+
     # Create voice directory
     voice_id = name.lower().replace(" ", "_").replace("-", "_")
     voice_dir = settings.voices_dir / voice_id
@@ -77,17 +93,20 @@ async def upload_voice(
 
     # Save model file
     model_path = voice_dir / model_file.filename
-    with open(model_path, "wb") as f:
-        content = await model_file.read()
-        f.write(content)
+    async with aiofiles.open(model_path, "wb") as f:
+        await f.write(model_content)
 
     # Save index file if provided
     index_path = None
-    if index_file and index_file.filename and index_file.filename.endswith(".index"):
+    if index_file and index_file.filename:
+        if not index_file.filename.endswith(".index"):
+            raise HTTPException(400, "Index file must be a .index file")
+        index_content = await index_file.read()
+        if len(index_content) > _MAX_INDEX_SIZE:
+            raise HTTPException(413, "Index file too large (max 500MB)")
         index_path = voice_dir / index_file.filename
-        with open(index_path, "wb") as f:
-            content = await index_file.read()
-            f.write(content)
+        async with aiofiles.open(index_path, "wb") as f:
+            await f.write(index_content)
 
     # Save metadata
     voice_info = VoiceInfo(
@@ -99,7 +118,8 @@ async def upload_voice(
         index_path=str(index_path) if index_path else None,
     )
     meta_path = voice_dir / "metadata.json"
-    meta_path.write_text(json.dumps(voice_info.model_dump(), indent=2, ensure_ascii=False))
+    async with aiofiles.open(meta_path, "w", encoding="utf-8") as f:
+        await f.write(json.dumps(voice_info.model_dump(), indent=2, ensure_ascii=False))
 
     return voice_info
 

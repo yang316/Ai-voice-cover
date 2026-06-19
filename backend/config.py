@@ -2,7 +2,7 @@
 import os
 import sys
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _get_data_dir() -> Path:
@@ -28,6 +28,8 @@ _data_dir.mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AVC_", env_file=".env")
+
     app_name: str = "AI Voice Cover"
     debug: bool = False
 
@@ -68,10 +70,6 @@ class Settings(BaseSettings):
 
     # i18n
     default_language: str = "zh"  # "zh" or "en"
-
-    class Config:
-        env_prefix = "AVC_"
-        env_file = ".env"
 
 
 settings = Settings()

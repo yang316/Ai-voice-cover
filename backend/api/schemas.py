@@ -2,7 +2,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ComputeBackend(str, Enum):
@@ -33,6 +33,8 @@ class TaskResponse(BaseModel):
 
 
 class TaskInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     task_id: str = Field(alias="id")
     status: TaskStatus
     progress: int = 0
@@ -45,20 +47,16 @@ class TaskInfo(BaseModel):
     completed_at: Optional[str] = None
     error: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
-
 
 class VoiceInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
     name: str
     description: Optional[str] = None
     modelPath: Optional[str] = Field(None, alias="model_path")
     indexPath: Optional[str] = Field(None, alias="index_path")
     source: str = "local"
-
-    class Config:
-        populate_by_name = True
 
 
 class DeviceInfo(BaseModel):

@@ -222,9 +222,11 @@ import { useVoicesStore } from '@/stores/voices'
 import { useTasksStore } from '@/stores/tasks'
 import { useApi } from '@/composables/useApi'
 import { useI18n } from '@/composables/useI18n'
-import CoverView from '@/views/CoverViewNew.vue'
-import TtsView from '@/views/TtsViewNew.vue'
-import TrainView from '@/views/TrainViewNew.vue'
+import { defineAsyncComponent } from 'vue'
+
+const CoverView = defineAsyncComponent(() => import('@/views/CoverViewNew.vue'))
+const TtsView = defineAsyncComponent(() => import('@/views/TtsViewNew.vue'))
+const TrainView = defineAsyncComponent(() => import('@/views/TrainViewNew.vue'))
 
 const message = inject<MessageApiInjection>('message')
 const appStore = useAppStore()

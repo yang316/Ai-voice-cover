@@ -666,7 +666,3 @@ if __name__ == "__main__":
     rmvpe = RMVPE(args.model, is_half=False, device=device)
     f0 = rmvpe.infer_from_audio(audio, thred=args.threshold)
     print(f"Extracted F0: {len(f0)} frames, voiced: {(f0 > 0).sum()}")
-    # f0 = rmvpe.infer_from_audio(audio, thred=thred)
-    # f0 = rmvpe.infer_from_audio(audio, thred=thred)
-    # f0 = rmvpe.infer_from_audio(audio, thred=thred)
-    # f0 = rmvpe.infer_from_audio(audio, thred=thred)

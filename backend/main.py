@@ -40,6 +40,14 @@ async def lifespan(app: FastAPI):
     logger.info("Available features: %s", ", ".join(sorted(_available_features)) or "none")
     if _missing_features:
         logger.info("Missing features (install ML deps to enable): %s", ", ".join(sorted(_missing_features)))
+
+    # Run temp file cleanup on startup
+    try:
+        from backend.core.cleanup import cleanup_temp_files
+        cleanup_temp_files(settings.upload_dir, settings.output_dir)
+    except Exception as e:
+        logger.warning("Startup cleanup failed: %s", e)
+
     yield
 
 

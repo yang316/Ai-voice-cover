@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
@@ -94,8 +95,8 @@ async def create_cover(
     ext = Path(audio_file.filename).suffix or ".mp3"
     input_path = settings.upload_dir / f"{task_id}{ext}"
 
-    with open(input_path, "wb") as f:
-        f.write(content)
+    async with aiofiles.open(input_path, "wb") as f:
+        await f.write(content)
 
     now = datetime.now(timezone.utc).isoformat()
     save_task(
