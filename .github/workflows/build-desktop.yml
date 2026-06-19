@@ -29,9 +29,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
-            sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+            node scripts/set-version.js "$VERSION"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -112,9 +110,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
-            sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+            node scripts/set-version.js "$VERSION"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
@@ -181,9 +177,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=$VERSION" >> $GITHUB_ENV
-            node -e "const fs=require('fs');const t=fs.readFileSync('src-tauri/tauri.conf.json','utf8');fs.writeFileSync('src-tauri/tauri.conf.json',t.replace(/\"version\": \"[^\"]*\"/,`\"version\": \"$VERSION\"`))"
-            sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+            node scripts/set-version.js "$VERSION"
             echo "Version set to $VERSION"
           else
             echo "No tag, keeping existing version"
