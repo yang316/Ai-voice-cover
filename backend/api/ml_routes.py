@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 import importlib.util
+import platform
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -16,6 +17,25 @@ _install_status = {
     "error": None,
 }
 
+# ROCm index URLs for AMD GPUs (RDNA 3 / RDNA 4)
+ROCM_INDEX_URLS = {
+    "gfx110X": "https://d2awnip2yjpvqn.cloudfront.net/v2/gfx110X-dgpu/",
+    "gfx120X": "https://d2awnip2yjpvqn.cloudfront.net/v2/gfx120X-all/",
+}
+
+# GPU architecture mapping (PCI device name → index key)
+AMD_GPU_ARCH_MAP = {
+    "7900 XTX": "gfx110X",
+    "7900 XT": "gfx110X",
+    "7900 GRE": "gfx110X",
+    "7800 XT": "gfx110X",
+    "7700 XT": "gfx110X",
+    "7600": "gfx110X",
+    "9070 XT": "gfx120X",
+    "9070": "gfx120X",
+    "9060 XT": "gfx120X",
+}
+
 
 def _check_module(name: str) -> bool:
     """Check if a module is installed without importing it."""
@@ -23,6 +43,26 @@ def _check_module(name: str) -> bool:
         return importlib.util.find_spec(name) is not None
     except (ModuleNotFoundError, ValueError):
         return False
+
+
+def _detect_amd_gpu() -> str | None:
+    """Detect AMD GPU and return architecture key, or None."""
+    if platform.system() != "Windows":
+        return None
+    try:
+        result = subprocess.run(
+            ["powershell", "-Command",
+             "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            gpu_name = result.stdout.strip()
+            for pattern, arch in AMD_GPU_ARCH_MAP.items():
+                if pattern in gpu_name:
+                    return arch
+    except Exception:
+        pass
+    return None
 
 
 @router.get("/ml/status")
@@ -33,12 +73,20 @@ def ml_status():
         deps[mod] = _check_module(mod)
 
     all_installed = all(deps.values())
+
+    # Detect GPU info
+    gpu_info = None
+    arch = _detect_amd_gpu()
+    if arch:
+        gpu_info = {"vendor": "AMD", "arch": arch, "rocm_index": ROCM_INDEX_URLS.get(arch)}
+
     return {
         "installed": all_installed,
         "deps": deps,
         "installing": _install_status["running"],
         "progress": _install_status["progress"],
         "error": _install_status["error"],
+        "gpu": gpu_info,
     }
 
 
@@ -51,24 +99,74 @@ def install_ml():
     def _install():
         _install_status["running"] = True
         _install_status["error"] = None
-        _install_status["progress"] = "Installing PyTorch..."
-
-        req_file = Path(__file__).parent.parent.parent / "requirements-ml.txt"
-        if not req_file.exists():
-            _install_status["error"] = "requirements-ml.txt not found"
-            _install_status["running"] = False
-            return
+        _install_status["progress"] = "检测 GPU..."
 
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--quiet",
-                 "--no-warn-script-location", "-r", str(req_file)],
-                capture_output=True, text=True, timeout=1800,
-            )
-            if proc.returncode != 0:
-                _install_status["error"] = proc.stderr[-500:] if proc.stderr else "Unknown error"
+            # Step 1: Detect AMD GPU
+            arch = _detect_amd_gpu()
+            req_file = Path(__file__).parent.parent.parent / "requirements-ml.txt"
+            if not req_file.exists():
+                _install_status["error"] = "requirements-ml.txt not found"
+                _install_status["running"] = False
+                return
+
+            if arch and arch in ROCM_INDEX_URLS:
+                # AMD GPU: install PyTorch from ROCm index first
+                _install_status["progress"] = f"检测到 AMD GPU ({arch})，安装 ROCm PyTorch..."
+                index_url = ROCM_INDEX_URLS[arch]
+                proc = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet",
+                     "--no-warn-script-location",
+                     "--index-url", index_url,
+                     "torch", "torchaudio"],
+                    capture_output=True, text=True, timeout=1800,
+                )
+                if proc.returncode != 0:
+                    _install_status["error"] = (
+                        f"ROCm PyTorch 安装失败: {proc.stderr[-300:] if proc.stderr else 'Unknown error'}"
+                    )
+                    _install_status["running"] = False
+                    return
+
+                # Step 2: Install remaining ML deps from PyPI (skip torch)
+                _install_status["progress"] = "安装其他 ML 依赖..."
+                with open(req_file) as f:
+                    lines = f.readlines()
+                # Filter out torch/torchaudio lines (already installed)
+                other_deps = [
+                    l.strip() for l in lines
+                    if l.strip() and not l.startswith("#")
+                    and not l.startswith("torch")
+                    and not l.startswith("torchaudio")
+                ]
+                if other_deps:
+                    proc = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "--quiet",
+                         "--no-warn-script-location"] + other_deps,
+                        capture_output=True, text=True, timeout=1800,
+                    )
+                    if proc.returncode != 0:
+                        _install_status["error"] = (
+                            f"部分依赖安装失败: {proc.stderr[-300:] if proc.stderr else 'Unknown error'}"
+                        )
+                        _install_status["running"] = False
+                        return
             else:
-                _install_status["progress"] = "Done!"
+                # NVIDIA / CPU: install everything from PyPI
+                _install_status["progress"] = "安装 ML 依赖 (CPU/NVIDIA)..."
+                proc = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet",
+                     "--no-warn-script-location", "-r", str(req_file)],
+                    capture_output=True, text=True, timeout=1800,
+                )
+                if proc.returncode != 0:
+                    _install_status["error"] = (
+                        proc.stderr[-500:] if proc.stderr else "Unknown error"
+                    )
+                    _install_status["running"] = False
+                    return
+
+            _install_status["progress"] = "Done!"
         except subprocess.TimeoutExpired:
             _install_status["error"] = "Installation timed out (30 min)"
         except Exception as e:

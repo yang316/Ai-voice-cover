@@ -160,6 +160,7 @@ import { NForm, NFormItem, NInput, NInputNumber, NButton, NProgress, NSpace, NUp
 import type { MessageApiInjection } from 'naive-ui/es/message/src/MessageProvider'
 import { useTasksStore } from '@/stores/tasks'
 import { useI18n } from '@/composables/useI18n'
+import { api } from '@/composables/useApi'
 
 const emit = defineEmits(['processing-change'])
 
@@ -215,7 +216,7 @@ async function handleStartTraining() {
 
     statusText.value = 'Starting training...'
 
-    const response = await fetch('http://localhost:8000/api/v1/train', {
+    const response = await fetch(api('/train'), {
       method: 'POST',
       body: formData,
     })
@@ -265,7 +266,7 @@ async function handleStartTraining() {
 async function pollTrainingStatus(taskId: string) {
   const poll = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/train/${taskId}`)
+      const response = await fetch(api(`/train/${taskId}`))
       if (!response.ok) {
         throw new Error('Failed to get training status')
       }
@@ -333,7 +334,7 @@ function downloadModel(id: string) {
   const item = history.value.find(h => h.id === id)
   if (item && item.status === 'completed') {
     message?.info(`Downloading model: ${item.modelName}`)
-    const url = `http://localhost:8000/api/v1/train/download/${id}`
+    const url = api(`/train/download/${id}`)
     window.open(url, '_blank')
   } else {
     message?.error('Model not completed or not found')

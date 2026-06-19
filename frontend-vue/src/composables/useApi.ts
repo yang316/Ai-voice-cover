@@ -8,6 +8,7 @@ const BACKEND_BASE = `http://127.0.0.1:${BACKEND_PORT}/api/v1`
 let apiBase = BACKEND_BASE
 
 const api = (path: string) => `${apiBase}${path}`
+export { api }
 
 export function useApi() {
   const loading = ref(false)
