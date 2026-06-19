@@ -250,8 +250,11 @@ const mlProgress = ref('')
 const showInstallMl = computed(() => {
   if (appStore.health.status !== 'online') return false
   const features = (appStore.health as any).features
-  if (!features) return false
-  return features.missing?.some((f: string) => ['covers', 'training'].includes(f))
+  // Show if ML features are missing
+  if (features?.missing?.some((f: string) => ['covers', 'training'].includes(f))) return true
+  // Show if GPU upgrade available (e.g. CPU-only torch on a GPU machine)
+  if ((appStore.health as any).gpu_upgradeable) return true
+  return false
 })
 
 async function installMlDeps() {

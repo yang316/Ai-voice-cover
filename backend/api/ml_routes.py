@@ -65,6 +65,56 @@ def _detect_amd_gpu() -> str | None:
     return None
 
 
+def _check_torch_backend() -> dict:
+    """Check installed torch version and backend support."""
+    info = {"installed": False, "version": None, "backend": "none", "gpu_upgradeable": False}
+
+    if not _check_module("torch"):
+        return info
+
+    info["installed"] = True
+    try:
+        # Use importlib to get version without full import
+        import importlib.metadata
+        ver = importlib.metadata.version("torch")
+        info["version"] = ver
+        if "+cpu" in ver:
+            info["backend"] = "cpu"
+        elif "+rocm" in ver:
+            info["backend"] = "rocm"
+        elif "+cu" in ver:
+            info["backend"] = "cuda"
+        else:
+            info["backend"] = "unknown"
+    except Exception:
+        info["backend"] = "unknown"
+
+    # Check if GPU upgrade is available
+    arch = _detect_amd_gpu()
+    if arch:
+        info["gpu_vendor"] = "AMD"
+        info["gpu_arch"] = arch
+        if info["backend"] == "cpu":
+            info["gpu_upgradeable"] = True
+            info["upgrade_index"] = ROCM_INDEX_URLS.get(arch)
+    else:
+        # Check for NVIDIA GPU
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and "NVIDIA" in result.stdout.upper():
+                info["gpu_vendor"] = "NVIDIA"
+                if info["backend"] == "cpu":
+                    info["gpu_upgradeable"] = True
+        except Exception:
+            pass
+
+    return info
+
+
 @router.get("/ml/status")
 def ml_status():
     """Check if ML dependencies are installed."""
@@ -73,12 +123,7 @@ def ml_status():
         deps[mod] = _check_module(mod)
 
     all_installed = all(deps.values())
-
-    # Detect GPU info
-    gpu_info = None
-    arch = _detect_amd_gpu()
-    if arch:
-        gpu_info = {"vendor": "AMD", "arch": arch, "rocm_index": ROCM_INDEX_URLS.get(arch)}
+    torch_info = _check_torch_backend()
 
     return {
         "installed": all_installed,
@@ -86,7 +131,8 @@ def ml_status():
         "installing": _install_status["running"],
         "progress": _install_status["progress"],
         "error": _install_status["error"],
-        "gpu": gpu_info,
+        "torch": torch_info,
+        "gpu_upgradeable": torch_info.get("gpu_upgradeable", False),
     }
 
 
@@ -132,7 +178,6 @@ def install_ml():
                 _install_status["progress"] = "安装其他 ML 依赖..."
                 with open(req_file) as f:
                     lines = f.readlines()
-                # Filter out torch/torchaudio lines (already installed)
                 other_deps = [
                     l.strip() for l in lines
                     if l.strip() and not l.startswith("#")
@@ -166,7 +211,7 @@ def install_ml():
                     _install_status["running"] = False
                     return
 
-            _install_status["progress"] = "Done!"
+            _install_status["progress"] = "Done! 请重启应用"
         except subprocess.TimeoutExpired:
             _install_status["error"] = "Installation timed out (30 min)"
         except Exception as e:
