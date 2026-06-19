@@ -75,9 +75,11 @@ class VoiceCoverPipeline:
             shutil.copy2(str(vocals_path), str(converted_path))
             # Apply pitch shift via ffmpeg if requested
             if pitch_shift != 0:
+                from backend.core.ffmpeg_util import get_ffmpeg_path
+                ffmpeg = get_ffmpeg_path()
                 shifted_path = output_dir / f"{stem}_shifted.wav"
                 ratio = 2 ** (pitch_shift / 12)
-                cmd = ["ffmpeg", "-y", "-i", str(converted_path),
+                cmd = [ffmpeg, "-y", "-i", str(converted_path),
                        "-af", f"rubberband=pitch={ratio:.6f}", str(shifted_path)]
                 proc = await asyncio.create_subprocess_exec(*cmd,
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)

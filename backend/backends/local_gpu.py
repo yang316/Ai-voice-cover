@@ -64,9 +64,11 @@ class LocalGPUBackend(ComputeBackend):
             shutil.copy2(str(input_audio), str(output_path))
             return
 
+        from backend.core.ffmpeg_util import get_ffmpeg_path
+        ffmpeg = get_ffmpeg_path()
         # Use rubberband for pitch shifting
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg, "-y",
             "-i", str(input_audio),
             "-af", f"rubberband=pitch={2 ** (pitch_shift / 12):.6f}",
             str(output_path),

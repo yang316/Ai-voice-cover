@@ -3,6 +3,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+from backend.core.ffmpeg_util import get_ffmpeg_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,8 +29,9 @@ class AudioMixer:
             f"[vocals][accomp]amix=inputs=2:duration=longest[out]"
         )
 
+        ffmpeg = get_ffmpeg_path()
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg, "-y",
             "-i", str(vocals),
             "-i", str(accompaniment),
             "-filter_complex", filter_complex,
@@ -54,8 +57,9 @@ class AudioMixer:
         """Basic noise reduction using ffmpeg highpass/lowpass filter."""
         output_path = output_dir / f"{audio_path.stem}_denoised.wav"
 
+        ffmpeg = get_ffmpeg_path()
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg, "-y",
             "-i", str(audio_path),
             "-af", "highpass=f=80,lowpass=f=12000,afftdn=nf=-25",
             str(output_path),

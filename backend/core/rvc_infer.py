@@ -424,13 +424,15 @@ def rvc_convert(
 def _fallback_convert(input_path: str, output_path: str, pitch_shift: int, tgt_sr: int) -> str:
     """Fallback: use FFmpeg pitch shift when RVC model can't load."""
     import subprocess
+    from backend.core.ffmpeg_util import get_ffmpeg_path
+    ffmpeg = get_ffmpeg_path()
     if pitch_shift == 0:
         import shutil
         shutil.copy2(input_path, output_path)
     else:
         factor = 2 ** (pitch_shift / 12)
         cmd = [
-            "ffmpeg", "-y", "-i", input_path,
+            ffmpeg, "-y", "-i", input_path,
             "-af", f"asetrate={tgt_sr * factor},aresample={tgt_sr}",
             output_path,
         ]
